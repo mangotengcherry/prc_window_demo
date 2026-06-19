@@ -1,0 +1,68 @@
+<script setup>
+// 교호작용 heatmap: x_bin×y_bin 격자, cell 색 = value(aggregation). 저카운트 셀은 디엠퍼시스.
+import { computed } from 'vue'
+import VChart from 'vue-echarts'
+import '../echarts.js'
+
+const props = defineProps({
+  cells: { type: Array, default: () => [] },   // [{ x_bin, y_bin, x_bin_label, y_bin_label, value, count }]
+  xBins: { type: Number, default: 10 },
+  yBins: { type: Number, default: 10 },
+  xLabel: { type: String, default: 'x' },
+  yLabel: { type: String, default: 'y' },
+  valueLabel: { type: String, default: 'value' },
+  minCount: { type: Number, default: 10 },
+})
+
+// 채워진 cell에서 축 라벨 복원(빈 bin은 공백)
+const xLabels = computed(() => { const a = Array(props.xBins).fill(''); props.cells.forEach((c) => { a[c.x_bin] = c.x_bin_label }); return a })
+const yLabels = computed(() => { const a = Array(props.yBins).fill(''); props.cells.forEach((c) => { a[c.y_bin] = c.y_bin_label }); return a })
+const vals = computed(() => props.cells.map((c) => c.value).filter((v) => v != null))
+
+const option = computed(() => {
+  const data = props.cells.map((c) => ({
+    value: [c.x_bin, c.y_bin, c.value], count: c.count,
+    xl: c.x_bin_label, yl: c.y_bin_label,
+    itemStyle: c.count < props.minCount ? { opacity: 0.3 } : {},
+  }))
+  const vmin = vals.value.length ? Math.min(...vals.value) : 0
+  const vmax = vals.value.length ? Math.max(...vals.value) : 1
+  return {
+    tooltip: {
+      position: 'top',
+      formatter: (p) => `${props.xLabel}: ${p.data.xl}<br/>${props.yLabel}: ${p.data.yl}` +
+        `<br/>${props.valueLabel}: ${p.data.value[2]}<br/>n = ${p.data.count}` +
+        (p.data.count < props.minCount ? ` <span style="color:#b45309">(thin)</span>` : ''),
+    },
+    grid: { left: 64, right: 18, top: 14, bottom: 64 },
+    xAxis: { type: 'category', data: xLabels.value, name: props.xLabel, nameLocation: 'middle', nameGap: 42,
+      nameTextStyle: { fontSize: 10 }, axisLabel: { fontSize: 8, rotate: 40, interval: 0 } },
+    yAxis: { type: 'category', data: yLabels.value, name: props.yLabel, nameTextStyle: { fontSize: 10 },
+      axisLabel: { fontSize: 8, interval: 0 } },
+    visualMap: {
+      type: 'continuous', min: vmin, max: vmax, calculable: true,
+      orient: 'horizontal', left: 'center', bottom: 0, itemWidth: 12, itemHeight: 120,
+      precision: 1, text: ['높음', '낮음'], textStyle: { fontSize: 9 },
+      inRange: { color: ['#440154', '#21918c', '#fde725'] },  // viridis(색맹 안전)
+    },
+    series: [{
+      type: 'heatmap', data,
+      label: { show: false },
+      emphasis: { itemStyle: { borderColor: '#111', borderWidth: 1 } },
+    }],
+  }
+})
+</script>
+
+<template>
+  <div class="wrap">
+    <VChart v-if="cells.length" class="chart" :option="option" autoresize />
+    <p v-else class="empty">데이터 없음</p>
+  </div>
+</template>
+
+<style scoped>
+.wrap { position: relative; }
+.chart { height: 300px; width: 100%; }
+.empty { height: 300px; display: flex; align-items: center; justify-content: center; color: #aaa; font-size: 13px; }
+</style>
