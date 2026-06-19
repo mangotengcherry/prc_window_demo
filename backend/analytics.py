@@ -175,6 +175,30 @@ def _control_limits(values: pd.Series):
     return {"ucl": round(mu + 3 * sigma, 4), "lcl": round(mu - 3 * sigma, 4), "sigma": round(sigma, 4)}
 
 
+def _fit_estimate(obs_rows: pd.DataFrame, sub: pd.DataFrame, xf: str, yt: str):
+    """관측 wafer로 y~x 선형회귀 적합 → 미관측 wafer의 x로 y 추정 (사용자 선택: X–Y 회귀)."""
+    o = obs_rows[obs_rows[xf].notna()]
+    if len(o) < 5:
+        return [], None
+    x = o[xf].to_numpy(dtype=float)
+    y = o[yt].to_numpy(dtype=float)
+    sxx = float(((x - x.mean()) ** 2).sum())
+    if sxx == 0:
+        return [], None
+    slope = float(((x - x.mean()) * (y - y.mean())).sum() / sxx)
+    intercept = float(y.mean() - slope * x.mean())
+    yhat = slope * x + intercept
+    ss_res = float(((y - yhat) ** 2).sum())
+    ss_tot = float(((y - y.mean()) ** 2).sum())
+    r2 = (1 - ss_res / ss_tot) if ss_tot else None
+    # 미관측(=y 미확보) wafer를 x로 추정
+    un = sub[sub[xf].notna() & (~sub["observed"])].sort_values("fab_track_out_time")
+    pts = [[t.isoformat(), round(float(slope * xx + intercept), 4)] for t, xx in zip(un["fab_track_out_time"], un[xf])]
+    fit = {"slope": round(slope, 6), "intercept": round(intercept, 4),
+           "r2": round(float(r2), 4) if r2 is not None else None, "n": int(len(o))}
+    return pts, fit
+
+
 def compute_timeseries(req) -> dict:
     df = _with_target_groups(D.load_dataframe(), getattr(req, "y_target_groups", None))
     base = _filter_rows(df, line_id=req.line_id, product=req.product,
@@ -182,7 +206,7 @@ def compute_timeseries(req) -> dict:
     splits = _cf_splits(base, getattr(req, "category_feature", None))
     units = D.feature_unit_map()
 
-    targets, features = [], []
+    targets, features, estimates = [], [], []
     for cf_name, cf_val, sub in splits:
         for yt in req.y_targets:
             obs = _apply_target_date(sub[sub["observed"] & sub[yt].notna()], req.target_date_range)
@@ -198,6 +222,14 @@ def compute_timeseries(req) -> dict:
                 "avg": round(float(obs[yt].mean()), 4) if len(obs) else None,
                 "control_limits": _control_limits(obs[yt]) if len(obs) else None,
             })
+            # 조합별 추정 y (미관측 wafer) — y~x 선형회귀
+            for xf in req.x_features:
+                if xf not in sub.columns:
+                    continue
+                pts, fit = _fit_estimate(obs, sub, xf, yt)
+                if pts:
+                    estimates.append({"x_feature": xf, "y_target": yt,
+                                      "category_feature_value": cf_val, "points": pts, "fit_summary": fit})
         for xf in req.x_features:
             if xf not in sub.columns:
                 continue
@@ -221,6 +253,7 @@ def compute_timeseries(req) -> dict:
         "n_total": int(len(base)),
         "targets": targets,
         "features": features,
+        "estimates": estimates,
     }
 
 

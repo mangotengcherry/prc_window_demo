@@ -165,6 +165,15 @@ class FeatureSeries(BaseModel):
     control_limits: Optional[Dict[str, float]] = None
 
 
+class EstimateSeries(BaseModel):
+    """조합(x_feature × y_target × 분할값)별 추정 y. 미관측 wafer를 y~x 선형회귀로 추정."""
+    x_feature: str
+    y_target: str
+    category_feature_value: Optional[str] = None
+    points: list  # [[iso, value], ...] — 미관측 wafer의 추정 y
+    fit_summary: Optional[Dict[str, Any]] = None  # {slope, intercept, r2, n}
+
+
 class TimeseriesResponse(BaseModel):
     fab_step: str
     time_basis: TimeBasis
@@ -172,6 +181,7 @@ class TimeseriesResponse(BaseModel):
     n_total: Optional[int] = None
     targets: List[TargetSeries]
     features: List[FeatureSeries]
+    estimates: List[EstimateSeries] = []
 
 
 # ---------- /api/table ----------
