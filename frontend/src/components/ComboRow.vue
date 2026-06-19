@@ -98,7 +98,7 @@ const ck = (v) => (v == null ? '' : (v < 1 ? 'bad' : (v < 1.33 ? 'warn' : 'good'
     <div class="charts">
       <div class="cell">
         <div class="cap">Window</div>
-        <WindowChart v-if="!multi" :bins="combo.bins" :x-feature="xName" :y-target="combo.y_target" :spec="spec" :dc-spec="dcSpec" :min-n="minN" />
+        <WindowChart v-if="!multi" :bins="combo.bins" :recommended-window="combo.recommended_window" :x-feature="xName" :y-target="combo.y_target" :spec="spec" :dc-spec="dcSpec" :min-n="minN" />
         <WindowChart v-else :groups="windowGroups" :x-feature="xName" :y-target="combo.y_target" :spec="spec" :dc-spec="dcSpec" :min-n="minN" />
       </div>
       <div class="cell">
