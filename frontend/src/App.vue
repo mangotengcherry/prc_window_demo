@@ -6,6 +6,7 @@ import ComboRow from './components/ComboRow.vue'
 import DataTable from './components/DataTable.vue'
 import { fetchColumns, fetchXFeatureOptions, fetchBinned, fetchTimeseries, fetchTable } from './api/client.js'
 import { cpk } from './stats.js'
+import { SERIES } from './palette.js'
 
 const columns = ref(null)
 const xFeatureOptions = ref([])
@@ -49,8 +50,11 @@ async function onDraw(cond) {
     binned.value = b
     timeseries.value = t
     tableRows.value = tbl.rows
+    const mode = cond.category_feature?.chart_mode
     b.combos.forEach((c) => {
-      const k = comboKey(c.x_feature, c.y_target, c.category_feature_value)
+      // 겹쳐보기(multi_line)는 (x,y) 1행에 공유 spec, 분리(split)는 분할값별 spec
+      const cfv = mode === 'multi_line' ? null : c.category_feature_value
+      const k = comboKey(c.x_feature, c.y_target, cfv)
       if (!specByCombo[k]) specByCombo[k] = { lower: null, upper: null }
     })
     lastCond.value = cond
@@ -72,23 +76,55 @@ const statsByCombo = computed(() => {
 })
 
 const sameCfv = (a, b) => (a ?? null) === (b ?? null)
+const isThin = (c, minN) => { const mx = c.bins.length ? Math.max(...c.bins.map((b) => b.wafer_count)) : 0; return c.bins.length > 0 && mx < minN }
+const tgtOf = (c, cfv) => timeseries.value.targets.find((s) => s.name === c.y_target && sameCfv(s.category_feature_value, cfv)) || null
+const ftrOf = (c, cfv) => timeseries.value.features.find((s) => s.name === c.x_feature && sameCfv(s.category_feature_value, cfv)) || null
 
 const rows = computed(() => {
   if (!binned.value || !timeseries.value) return []
   const minN = columns.value?.min_n ?? 10
+  const multi = lastCond.value?.category_feature?.chart_mode === 'multi_line'
+
+  if (multi) {
+    // (x_feature × y_target) 1행에 분할값들을 겹쳐 표시
+    const groups = new Map()
+    binned.value.combos.forEach((c) => {
+      const gk = `${c.x_feature}__${c.y_target}`
+      if (!groups.has(gk)) groups.set(gk, [])
+      groups.get(gk).push(c)
+    })
+    return [...groups.values()].map((combos) => {
+      const f = combos[0]
+      const members = combos.map((c, i) => ({
+        cfv: c.category_feature_value,
+        combo: c,
+        target: tgtOf(c, c.category_feature_value),
+        feature: ftrOf(c, c.category_feature_value),
+        stats: statsByCombo.value[comboKey(c.x_feature, c.y_target, c.category_feature_value)] || null,
+        color: SERIES[i % SERIES.length],
+      }))
+      return {
+        key: comboKey(f.x_feature, f.y_target, ''),  // 공유 spec
+        multi: true,
+        combo: { x_feature: f.x_feature, x_feature_display_name: f.x_feature_display_name, y_target: f.y_target, category_feature_name: f.category_feature_name },
+        members,
+        dcSpec: dcSpec(f.x_feature),
+        thin: combos.some((c) => isThin(c, minN)),
+      }
+    })
+  }
+
   return binned.value.combos.map((c) => {
     const cfv = c.category_feature_value
-    const tgt = timeseries.value.targets.find((s) => s.name === c.y_target && sameCfv(s.category_feature_value, cfv))
-    const ftr = timeseries.value.features.find((s) => s.name === c.x_feature && sameCfv(s.category_feature_value, cfv))
-    const maxN = c.bins.length ? Math.max(...c.bins.map((b) => b.wafer_count)) : 0
     return {
       key: comboKey(c.x_feature, c.y_target, cfv),
+      multi: false,
       combo: c,
-      target: tgt || null,
-      feature: ftr || null,
+      target: tgtOf(c, cfv),
+      feature: ftrOf(c, cfv),
       dcSpec: dcSpec(c.x_feature),
       stats: statsByCombo.value[comboKey(c.x_feature, c.y_target, cfv)] || null,
-      thin: c.bins.length > 0 && maxN < minN,
+      thin: isThin(c, minN),
     }
   })
 })
@@ -117,7 +153,11 @@ const condSummary = computed(() => {
   return `${c.line_id} · ${c.product} · ${c.category}/${c.eds_step} · ${c.fab_step} · ${c.date_range.start_date}~${c.date_range.end_date}`
 })
 
-function specFor(xf, yt, cfv) { return specByCombo[comboKey(xf, yt, cfv)] || {} }
+// 겹쳐보기(multi_line)는 (x,y) 공유 spec → cfv 무시. 분리(split)는 분할값별 spec.
+function specFor(xf, yt, cfv) {
+  const multi = lastCond.value?.category_feature?.chart_mode === 'multi_line'
+  return specByCombo[comboKey(xf, yt, multi ? null : cfv)] || {}
+}
 </script>
 
 <template>
@@ -158,6 +198,7 @@ function specFor(xf, yt, cfv) { return specByCombo[comboKey(xf, yt, cfv)] || {} 
       <section class="rows">
         <ComboRow v-for="r in rows" :key="r.key" :combo="r.combo"
                   :target="r.target" :feature="r.feature" :stats="r.stats"
+                  :multi="r.multi" :members="r.members"
                   :spec="specByCombo[r.key]" :dc-spec="r.dcSpec" :thin="r.thin"
                   :min-n="columns?.min_n ?? 10" :sampled="timeseries?.sampled" />
       </section>

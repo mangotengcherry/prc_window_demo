@@ -182,7 +182,11 @@ function onDraw() {
             <input type="checkbox" :value="v" v-model="categoryValues" /><span>{{ v }}</span>
           </label>
         </div>
-        <p class="muted">선택한 {{ categoryFeature }} 값별로 차트·테이블 행을 나눕니다.</p>
+        <div class="seg">
+          <button :class="{ on: chartMode === 'split' }" @click="chartMode = 'split'">분리</button>
+          <button :class="{ on: chartMode === 'multi_line' }" @click="chartMode = 'multi_line'">겹쳐보기</button>
+        </div>
+        <p class="muted">{{ chartMode === 'split' ? '값별로 차트·행을 따로 표시' : '한 차트에 값별 추세선을 겹쳐 비교' }}</p>
       </template>
     </section>
 
@@ -217,6 +221,10 @@ h3 small { font-size: 11px; font-weight: 600; color: var(--accent); background: 
 .tog input { width: 13px; height: 13px; accent-color: var(--accent); }
 .mini { flex: 1; min-width: 0; padding: 5px 6px; font-size: 11px; border-radius: 9px; border: 1px solid var(--border); background: #fff; color: var(--text); }
 .mini.full { flex: none; width: 100%; padding: 7px 9px; font-size: 13px; }
+.seg { display: flex; gap: 0; border: 1px solid var(--border); border-radius: 9px; overflow: hidden; background: #fff; }
+.seg button { flex: 1; padding: 6px 8px; font-size: 12px; font-weight: 600; border: none; background: #fff; color: var(--text-2); cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button.on { background: var(--accent-weak); color: var(--accent); }
 .outside { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; padding: 6px 2px 0; }
 .olbl { font-size: 10px; font-weight: 700; color: #92400e; background: #fde68a; padding: 1px 7px; border-radius: 999px; }
 .ochip { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-2); background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px; }

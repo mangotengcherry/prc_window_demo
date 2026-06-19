@@ -1,8 +1,8 @@
 <script setup>
-// 단일 조합 Window 차트 (M1): bar=count, line=y avg(±95% CI band).
-//  - 표본 적은 bin은 흐리게(디엠퍼시스)
-//  - user spec(점선 vermillion) / DC spec(점선 black) 수직선 + 라벨
-//  - 범례·tooltip(bin range·n·avg±CI)
+// Window 차트 (M1).
+//  - 분리(단일): bar=count, line=y avg. 표본 적은 bin은 흐리게.
+//  - 겹쳐보기(groups): 분할값별 y avg 추세선만 겹쳐 표시(막대 생략, 비교 우선).
+//  - user spec(점선 vermillion) / DC spec(점선 black) 수직선 + 라벨, 범례·tooltip.
 import { computed } from 'vue'
 import VChart from 'vue-echarts'
 import '../echarts.js'
@@ -10,6 +10,7 @@ import { PALETTE as C } from '../palette.js'
 
 const props = defineProps({
   bins: { type: Array, default: () => [] },
+  groups: { type: Array, default: null },  // [{ label, color, bins }] — 있으면 겹쳐보기
   xFeature: { type: String, default: '' },
   yTarget: { type: String, default: '' },
   spec: { type: Object, default: () => ({ lower: null, upper: null }) },
@@ -17,10 +18,27 @@ const props = defineProps({
   minN: { type: Number, default: 10 },
 })
 
-const option = computed(() => {
-  const bins = props.bins
-  const maxN = bins.length ? Math.max(...bins.map((b) => b.wafer_count)) : 1
+const mk = (val, color, label) => ({ xAxis: val, lineStyle: { color, type: 'dashed', width: 2 }, label: { formatter: label, fontSize: 9, color } })
+function specLines() {
+  const out = []
+  if (props.spec.lower != null) out.push(mk(props.spec.lower, C.specUser, 'USL'))
+  if (props.spec.upper != null) out.push(mk(props.spec.upper, C.specUser, 'USU'))
+  if (props.dcSpec.lower != null) out.push(mk(props.dcSpec.lower, C.specDc, 'DC-L'))
+  if (props.dcSpec.upper != null) out.push(mk(props.dcSpec.upper, C.specDc, 'DC-U'))
+  return out
+}
+const zoom = (rightW) => ([
+  { type: 'slider', yAxisIndex: 0, right: 8, width: 22, brushSelect: false, handleSize: 24, moveHandleSize: 9, showDetail: false },
+  { type: 'inside', yAxisIndex: 0 },
+  { type: 'slider', xAxisIndex: 0, height: 18, bottom: 4, brushSelect: false, handleSize: 24, moveHandleSize: 9, showDetail: false },
+  { type: 'inside', xAxisIndex: 0 },
+])
 
+const isMulti = computed(() => Array.isArray(props.groups) && props.groups.length > 0)
+const hasData = computed(() => isMulti.value ? props.groups.some((g) => g.bins.length) : props.bins.length > 0)
+
+function singleOption() {
+  const bins = props.bins
   const countData = bins.map((b) => ({
     value: [b.bin_center, b.wafer_count],
     itemStyle: { color: C.count, opacity: b.wafer_count < props.minN ? 0.4 : 1 },
@@ -29,14 +47,6 @@ const option = computed(() => {
     const ci = b.y_sem != null ? +(1.96 * b.y_sem).toFixed(4) : null
     return { value: [b.bin_center, b.y_avg], n: b.wafer_count, ci, left: b.bin_left, right: b.bin_right }
   })
-
-  const mk = (val, color, label) => ({ xAxis: val, lineStyle: { color, type: 'dashed', width: 2 }, label: { formatter: label, fontSize: 9, color } })
-  const specLines = []
-  if (props.spec.lower != null) specLines.push(mk(props.spec.lower, C.specUser, 'USL'))
-  if (props.spec.upper != null) specLines.push(mk(props.spec.upper, C.specUser, 'USU'))
-  if (props.dcSpec.lower != null) specLines.push(mk(props.dcSpec.lower, C.specDc, 'DC-L'))
-  if (props.dcSpec.upper != null) specLines.push(mk(props.dcSpec.upper, C.specDc, 'DC-U'))
-
   return {
     legend: { data: ['wafer count', 'y avg'], top: 4, left: 'center', itemWidth: 14, itemHeight: 8, textStyle: { fontSize: 10 } },
     tooltip: {
@@ -68,15 +78,44 @@ const option = computed(() => {
       {
         name: 'y avg', type: 'line', yAxisIndex: 1, smooth: true, symbolSize: 6, z: 3,
         data: avgData, lineStyle: { color: C.avg, width: 2 }, itemStyle: { color: C.avg },
-        markLine: { symbol: 'none', data: specLines },
+        markLine: { symbol: 'none', data: specLines() },
       },
     ],
   }
-})
+}
+
+function multiOption() {
+  const groups = props.groups
+  const series = groups.map((g, gi) => ({
+    name: g.label, type: 'line', smooth: true, symbolSize: 5, z: 3,
+    data: g.bins.map((b) => ({ value: [b.bin_center, b.y_avg], n: b.wafer_count, left: b.bin_left, right: b.bin_right })),
+    lineStyle: { color: g.color, width: 2 }, itemStyle: { color: g.color },
+    ...(gi === 0 ? { markLine: { symbol: 'none', data: specLines() } } : {}),
+  }))
+  return {
+    legend: { data: groups.map((g) => g.label), top: 4, left: 'center', itemWidth: 14, itemHeight: 8, textStyle: { fontSize: 10 } },
+    tooltip: {
+      trigger: 'axis',
+      formatter: (ps) => {
+        if (!ps.length) return ''
+        const head = `${props.xFeature} ≈ ${(+ps[0].axisValue).toFixed(3)}`
+        const lines = ps.map((p) => `${p.marker}${p.seriesName}: ${p.data.value[1] == null ? '-' : p.data.value[1]} (n=${p.data.n})`)
+        return [head, ...lines].join('<br/>')
+      },
+    },
+    grid: { left: 54, right: 36, top: 40, bottom: 54 },
+    xAxis: { type: 'value', scale: true, name: props.xFeature, nameLocation: 'middle', nameGap: 20, nameTextStyle: { fontSize: 10 } },
+    yAxis: { type: 'value', name: `${props.yTarget}`, scale: true, nameTextStyle: { fontSize: 10 } },
+    dataZoom: zoom(),
+    series,
+  }
+}
+
+const option = computed(() => (isMulti.value ? multiOption() : singleOption()))
 </script>
 
 <template>
-  <VChart v-if="bins.length" class="chart" :option="option" autoresize />
+  <VChart v-if="hasData" class="chart" :option="option" autoresize />
   <p v-else class="empty">데이터 없음 (이 조합은 관측 표본이 없습니다)</p>
 </template>
 

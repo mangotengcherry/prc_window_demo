@@ -12,3 +12,7 @@ export const PALETTE = {
   tsFeatureMa: '#CC79A7', // feature 이동평균 (purple)
   faint: 'rgba(17, 17, 26, 0.28)',
 }
+
+// 분할값(category feature) 오버레이용 범주 색 — multi-line 모드에서 값별 라인 구분.
+// spec 색(vermillion/black)과 충돌하지 않는 Okabe-Ito 계열 순서.
+export const SERIES = ['#0072B2', '#E69F00', '#009E73', '#CC79A7', '#56B4E9']
