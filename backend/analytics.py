@@ -30,6 +30,19 @@ def _within_std(vals) -> Optional[float]:
     return round(float(mr / 1.128), 4)
 
 
+def _with_target_groups(df: pd.DataFrame, groups) -> pd.DataFrame:
+    """인라인 grouped target → 합성 컬럼 추가. 원본 source가 NaN(미관측)이면 결과도 NaN."""
+    if not groups:
+        return df
+    df = df.copy()
+    for g in groups:
+        srcs = [s for s in g.sources if s in df.columns]
+        if not srcs:
+            continue
+        df[g.name] = df[srcs].sum(axis=1, min_count=1)  # 현재 sum만
+    return df
+
+
 def _cf_splits(sub: pd.DataFrame, cf):
     """category feature 값별로 (name, value, subdf) 분할. 미선택 시 단일 (None, None, sub)."""
     if cf and getattr(cf, "name", None) and getattr(cf, "values", None) and cf.name in sub.columns:
@@ -118,7 +131,7 @@ def _bin_one(sub: pd.DataFrame, x_feature: str, y_target: str, bins: int) -> Lis
 
 
 def compute_binned(req) -> dict:
-    df = D.load_dataframe()
+    df = _with_target_groups(D.load_dataframe(), getattr(req, "y_target_groups", None))
     sub = _filter_rows(df, line_id=req.line_id, product=req.product,
                        fab_step=req.fab_step, date_range=req.date_range)
     # observed-only + y target 확보 시점 필터
@@ -163,7 +176,7 @@ def _control_limits(values: pd.Series):
 
 
 def compute_timeseries(req) -> dict:
-    df = D.load_dataframe()
+    df = _with_target_groups(D.load_dataframe(), getattr(req, "y_target_groups", None))
     base = _filter_rows(df, line_id=req.line_id, product=req.product,
                         fab_step=req.fab_step, date_range=req.date_range).sort_values("fab_track_out_time")
     splits = _cf_splits(base, getattr(req, "category_feature", None))
@@ -213,7 +226,7 @@ def compute_timeseries(req) -> dict:
 
 # ---------------- /api/table ----------------
 def compute_table(req) -> dict:
-    df = D.load_dataframe()
+    df = _with_target_groups(D.load_dataframe(), getattr(req, "y_target_groups", None))
     base = _filter_rows(df, line_id=req.line_id, product=req.product,
                         fab_step=req.fab_step, date_range=req.date_range)
     base = _apply_target_date(base[base["observed"]], req.target_date_range)

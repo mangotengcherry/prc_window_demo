@@ -20,6 +20,14 @@ class CategoryFeatureSel(BaseModel):
     chart_mode: str = "multi_line"  # multi_line | split
 
 
+class TargetGroup(BaseModel):
+    """인라인(stateless) grouped target — 원본 target들을 합산한 합성 target.
+    정의는 요청에 동봉(E4), 보유는 클라이언트(localStorage). y_targets에 name으로 참조."""
+    name: str
+    sources: List[str]
+    agg: str = "sum"  # 현재 sum만 지원
+
+
 # ---------- /api/columns ----------
 class ColumnsResponse(BaseModel):
     line_ids: List[str]
@@ -74,6 +82,7 @@ class BinnedRequest(BaseModel):
     x_features: List[str]
     y_targets: List[str]
     bins: int = 10
+    y_target_groups: List[TargetGroup] = []
     category_feature: Optional[CategoryFeatureSel] = None
 
 
@@ -117,6 +126,7 @@ class TimeseriesRequest(BaseModel):
     fab_step: str
     x_features: List[str]
     y_targets: List[str]
+    y_target_groups: List[TargetGroup] = []
     category_feature: Optional[CategoryFeatureSel] = None
 
 
@@ -175,6 +185,7 @@ class TableRequest(BaseModel):
     fab_step: str
     x_features: List[str]
     y_targets: List[str]
+    y_target_groups: List[TargetGroup] = []
     category_feature: Optional[CategoryFeatureSel] = None
 
 
