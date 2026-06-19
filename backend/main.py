@@ -24,7 +24,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-MIN_N = 10
+MIN_N = analytics.MIN_N
 MAX_COMBOS = analytics.req_max_combos()
 
 
