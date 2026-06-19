@@ -4,6 +4,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import Sidebar from './components/Sidebar.vue'
 import ComboRow from './components/ComboRow.vue'
 import DataTable from './components/DataTable.vue'
+import InteractionPanel from './components/InteractionPanel.vue'
 import { fetchColumns, fetchXFeatureOptions, fetchBinned, fetchTimeseries, fetchTable } from './api/client.js'
 import { cpk } from './stats.js'
 import { SERIES } from './palette.js'
@@ -68,6 +69,12 @@ async function onDraw(cond) {
 
 const dcSpec = (xf) => columns.value?.dc_spec?.[xf] || {}
 const targetGroupDefs = computed(() => lastCond.value?.y_target_groups || [])
+// 교호작용 패널용 라벨(x_feature key → 표시명)
+const interactionLabels = computed(() => {
+  const m = {}
+  ;(binned.value?.combos || []).forEach((c) => { m[c.x_feature] = c.x_feature_display_name })
+  return m
+})
 
 // 조합(feature×target×분할값) → table 통계 매칭 (μ·σ_overall·σ_within·DC spec)
 const statsByCombo = computed(() => {
@@ -208,6 +215,10 @@ function specFor(xf, yt, cfv) {
         <h3 class="pane-title">요약 테이블</h3>
         <DataTable :rows="tableRows" :spec-for="specFor" :target-groups="targetGroupDefs" />
       </section>
+
+      <section v-if="status === 'loaded' && lastCond" class="ix-area">
+        <InteractionPanel :cond="lastCond" :labels="interactionLabels" :min-n="columns?.min_n ?? 10" />
+      </section>
     </main>
   </div>
 </template>
@@ -234,5 +245,6 @@ function specFor(xf, yt, cfv) {
 .kl { font-size: 11px; color: var(--text-2); text-transform: uppercase; letter-spacing: .03em; }
 .rows { display: flex; flex-direction: column; gap: 16px; padding: 12px 32px; }
 .table-area { padding: 6px 32px 36px; display: flex; flex-direction: column; gap: 10px; }
+.ix-area { padding: 0 32px 40px; }
 .pane-title { margin: 0; font-size: 13px; font-weight: 600; color: var(--text-2); text-transform: uppercase; letter-spacing: .04em; }
 </style>

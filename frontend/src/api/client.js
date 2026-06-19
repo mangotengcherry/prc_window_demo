@@ -46,3 +46,7 @@ export function fetchTimeseries(cond) {
 export function fetchTable(cond) {
   return call(async () => (await api.post('/table', cond)).data)
 }
+
+export function fetchInteraction(req) {
+  return call(async () => (await api.post('/interaction', req)).data)
+}
