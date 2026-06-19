@@ -1,20 +1,20 @@
-"""FastAPI 앱 진입점 — 라우팅 + CORS. 계산은 analytics.py 에 위임."""
-from fastapi import FastAPI, HTTPException
+"""FastAPI 앱 진입점 (M0). 라우팅 + CORS. 계산은 analytics.py 에 위임."""
+from typing import Optional
+
+from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 import analytics
-from data import DC_SPEC, FAB_STEPS, FEATURE_COLUMNS, TARGET_COLUMNS, load_dataframe
+import data as D
 from schemas import (
-    BinnedRequest,
-    BinnedResponse,
+    BinnedRequest, BinnedResponse,
     ColumnsResponse,
-    TableRequest,
-    TableResponse,
-    TimeseriesRequest,
-    TimeseriesResponse,
+    TableRequest, TableResponse,
+    TimeseriesRequest, TimeseriesResponse,
+    XFeatureOptionsResponse,
 )
 
-app = FastAPI(title="Process Window Dashboard API")
+app = FastAPI(title="Process Window Dashboard API (M0)")
 
 app.add_middleware(
     CORSMiddleware,
@@ -23,44 +23,62 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-def _check_columns(cols) -> None:
-    valid = set(FEATURE_COLUMNS) | set(TARGET_COLUMNS)
-    for c in cols:
-        if c not in valid:
-            raise HTTPException(status_code=400, detail=f"unknown column: {c}")
-
-
-def _check_step(step: str) -> None:
-    if step not in FAB_STEPS:
-        raise HTTPException(status_code=400, detail=f"unknown fab_step: {step}")
+MIN_N = 10
+MAX_COMBOS = analytics.req_max_combos()
 
 
 @app.get("/api/columns", response_model=ColumnsResponse)
 def get_columns():
-    return {"features": FEATURE_COLUMNS, "targets": TARGET_COLUMNS,
-            "fab_steps": FAB_STEPS, "dc_spec": DC_SPEC}
+    prc = D.fab_metro_prc()
+    units = {**D.feature_unit_map(), **D.TARGET_UNIT}
+    df = D.load_dataframe()
+    tmin = df["fab_track_out_time"].min().strftime("%Y-%m-%d")
+    tmax = df["fab_track_out_time"].max().strftime("%Y-%m-%d")
+    obs_eds = df.loc[df["observed"], "eds_tkout_time"]
+    emin = obs_eds.min().strftime("%Y-%m-%d")
+    emax = obs_eds.max().strftime("%Y-%m-%d")
+    return {
+        "line_ids": D.LINE_IDS,
+        "products": D.PRODUCTS,
+        "categories": D.CATEGORIES,
+        "eds_steps": D.EDS_STEPS,
+        "targets": D.ALL_TARGETS,
+        "targets_by_category": D.TARGETS_BY_CATEGORY,
+        "fab_steps": D.FAB_STEPS,
+        "metro_grades": sorted(prc["metro_grade"].unique().tolist()),
+        "metro_categories": sorted(prc["metro_category"].unique().tolist()),
+        "category_features": list(D.CATEGORY_FEATURES.keys()),
+        "category_feature_values": D.CATEGORY_FEATURES,
+        "dc_spec": D.dc_spec(),
+        "units": units,
+        "min_n": MIN_N,
+        "max_combos": MAX_COMBOS,
+        "date_default": {"start_date": tmin, "end_date": tmax},
+        "target_date_default": {"start_date": emin, "end_date": emax},
+    }
+
+
+@app.get("/api/x-feature-options", response_model=XFeatureOptionsResponse)
+def get_x_feature_options(
+    fab_step: Optional[str] = Query(None),
+    matching: bool = Query(True),
+    metro_grade: Optional[str] = Query(None),
+    metro_category: Optional[str] = Query(None),
+):
+    features = analytics.list_x_features(fab_step, matching, metro_grade, metro_category)
+    return {"matching": matching, "fab_step": fab_step, "features": features}
 
 
 @app.post("/api/binned", response_model=BinnedResponse)
 def post_binned(req: BinnedRequest):
-    _check_step(req.fab_step)
-    _check_columns(req.x_features + req.y_targets)
-    df = load_dataframe()
-    return analytics.compute_binned(df, req.fab_step, req.x_features, req.y_targets, req.bins)
+    return analytics.compute_binned(req)
 
 
 @app.post("/api/timeseries", response_model=TimeseriesResponse)
 def post_timeseries(req: TimeseriesRequest):
-    _check_step(req.fab_step)
-    _check_columns(req.x_features + req.y_targets)
-    df = load_dataframe()
-    return analytics.compute_timeseries(df, req.fab_step, req.x_features, req.y_targets)
+    return analytics.compute_timeseries(req)
 
 
 @app.post("/api/table", response_model=TableResponse)
 def post_table(req: TableRequest):
-    _check_step(req.fab_step)
-    _check_columns(req.x_features + req.y_targets)
-    df = load_dataframe()
-    return analytics.compute_table(df, req.fab_step, req.x_features, req.y_targets, DC_SPEC)
+    return analytics.compute_table(req)

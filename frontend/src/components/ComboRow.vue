@@ -1,22 +1,49 @@
 <script setup>
 // 한 조합(feature × target)의 한 행: [spec 입력 헤더] + [Window 차트 | 매칭 시계열 차트]
 // spec은 이 조합 전용. window(수직선)과 시계열(수평선)에 동시에 반영된다.
+import { computed } from 'vue'
 import WindowChart from './WindowChart.vue'
 import ComboTimeSeries from './ComboTimeSeries.vue'
+import { cpk, inSpecPct } from '../stats.js'
 
 const props = defineProps({
-  combo: { type: Object, required: true },        // { x_feature, y_target, bins }
-  targetPoints: { type: Array, default: () => [] },
-  featurePoints: { type: Array, default: () => [] },
+  combo: { type: Object, required: true },        // { x_feature, y_target, bins, ... }
+  target: { type: Object, default: null },        // timeseries target series 객체
+  feature: { type: Object, default: null },       // timeseries feature series 객체
+  stats: { type: Object, default: null },         // table row: x_value(μ)·x_std(σ전체)·x_std_within(σ단기)
   spec: { type: Object, required: true },         // { lower, upper } (양방향 바인딩 대상)
   dcSpec: { type: Object, default: () => ({}) },  // { lower, upper } feature별 DC spec
+  thin: { type: Boolean, default: false },        // 표본 부족(신뢰 낮음)
+  minN: { type: Number, default: 10 },
+  sampled: { type: Boolean, default: false },
 })
+
+const xName = props.combo.x_feature_display_name || props.combo.x_feature
+
+// capability — Cpk(단기 σ) / Ppk(전체 σ), DC spec / user spec 기준
+const hasUser = computed(() => props.spec?.lower != null && props.spec?.upper != null)
+const cap = computed(() => {
+  const s = props.stats || {}
+  const mu = s.x_value, so = s.x_std, sw = s.x_std_within
+  const d = props.dcSpec || {}, u = props.spec || {}
+  return {
+    cpkDc: cpk(mu, sw, d.lower, d.upper), ppkDc: cpk(mu, so, d.lower, d.upper),
+    cpkU: cpk(mu, sw, u.lower, u.upper), ppkU: cpk(mu, so, u.lower, u.upper),
+    inspecU: inSpecPct(mu, so, u.lower, u.upper),
+  }
+})
+const f2 = (v) => (v == null ? '-' : v.toFixed(2))
+const pct = (v) => (v == null ? '-' : (v * 100).toFixed(1) + '%')
+const ck = (v) => (v == null ? '' : (v < 1 ? 'bad' : (v < 1.33 ? 'warn' : 'good')))
 </script>
 
 <template>
   <div class="combo-row">
     <div class="header">
-      <span class="title">{{ combo.x_feature }} × {{ combo.y_target }}</span>
+      <span class="title">{{ xName }} × {{ combo.y_target }}
+        <span v-if="combo.category_feature_value" class="cf">· {{ combo.category_feature_value }}</span>
+        <span v-if="thin" class="thin" title="표본 부족 — 신뢰도 낮음">thin</span>
+      </span>
       <span class="spec">
         <span class="lbl">user spec</span>
         <label>lower <input type="number" v-model.number="spec.lower" /></label>
@@ -24,16 +51,30 @@ const props = defineProps({
       </span>
     </div>
 
+    <div class="cap-strip">
+      <span class="cg" title="DC spec 기준 — user 입력 없이 항상 산출. Cpk=단기 σ(MR/1.128), Ppk=전체 σ">vs DC</span>
+      <span>Cpk <b :class="ck(cap.cpkDc)">{{ f2(cap.cpkDc) }}</b></span>
+      <span>Ppk <b :class="ck(cap.ppkDc)">{{ f2(cap.ppkDc) }}</b></span>
+      <template v-if="hasUser">
+        <span class="div">|</span>
+        <span class="cg" title="user spec 기준">vs user</span>
+        <span>Cpk <b :class="ck(cap.cpkU)">{{ f2(cap.cpkU) }}</b></span>
+        <span>Ppk <b :class="ck(cap.ppkU)">{{ f2(cap.ppkU) }}</b></span>
+        <span title="in-spec 비율(정규근사)">in-spec <b>{{ pct(cap.inspecU) }}</b></span>
+      </template>
+      <span v-else class="hint">· user spec 입력 시 user 기준 capability 표시</span>
+    </div>
+
     <div class="charts">
       <div class="cell">
         <div class="cap">Window</div>
-        <WindowChart :bins="combo.bins" :x-feature="combo.x_feature" :y-target="combo.y_target" :spec="spec" :dc-spec="dcSpec" />
+        <WindowChart :bins="combo.bins" :x-feature="xName" :y-target="combo.y_target" :spec="spec" :dc-spec="dcSpec" :min-n="minN" />
       </div>
       <div class="cell">
         <div class="cap">시계열 (trackout_time)</div>
         <ComboTimeSeries
-          :target-points="targetPoints" :feature-points="featurePoints"
-          :y-target="combo.y_target" :x-feature="combo.x_feature" :spec="spec"
+          :target="target" :feature="feature"
+          :y-target="combo.y_target" :x-feature="xName" :spec="spec" :dc-spec="dcSpec" :sampled="sampled"
         />
       </div>
     </div>
@@ -47,8 +88,16 @@ const props = defineProps({
   transition: box-shadow .25s, transform .25s;
 }
 .combo-row:hover { box-shadow: var(--shadow); transform: translateY(-2px); }
+.cap-strip { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--text-2); margin: 0 0 12px; padding: 7px 13px; background: var(--surface-2); border-radius: 10px; }
+.cap-strip b { font-weight: 700; color: var(--text); }
+.cap-strip b.good { color: #166534; } .cap-strip b.warn { color: #854d0e; } .cap-strip b.bad { color: #991b1b; }
+.cap-strip .cg { font-weight: 700; color: var(--text); text-transform: uppercase; font-size: 10px; letter-spacing: .04em; cursor: help; }
+.cap-strip .div { color: var(--border); }
+.cap-strip .hint { color: #aaa; }
 .header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
-.title { font-size: 16px; font-weight: 600; color: var(--text); letter-spacing: -0.01em; }
+.title { font-size: 16px; font-weight: 600; color: var(--text); letter-spacing: -0.01em; display: flex; align-items: center; gap: 8px; }
+.cf { font-size: 12px; font-weight: 500; color: var(--accent); }
+.thin { font-size: 10px; font-weight: 700; color: #92400e; background: #fde68a; padding: 1px 7px; border-radius: 999px; text-transform: uppercase; }
 .spec { display: flex; align-items: center; gap: 12px; background: var(--surface-2); padding: 6px 12px; border-radius: 12px; }
 .lbl { font-size: 12px; font-weight: 600; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.03em; }
 .spec label { font-size: 12px; color: var(--text-2); display: flex; align-items: center; gap: 5px; }
