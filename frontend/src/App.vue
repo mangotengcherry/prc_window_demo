@@ -21,6 +21,7 @@ const status = ref('initial') // initial | loading | loaded | empty | error
 const errorMsg = ref('')
 const lastCond = ref(null)
 const lastQueryAt = ref('')
+const showEstimate = ref(false) // 미관측 wafer 추정 y 표시(분리 모드 시계열)
 
 const comboKey = (xf, yt, cfv) => `${xf}__${yt}__${cfv || ''}`
 
@@ -122,6 +123,7 @@ const rows = computed(() => {
     })
   }
 
+  const ests = timeseries.value.estimates || []
   return binned.value.combos.map((c) => {
     const cfv = c.category_feature_value
     return {
@@ -130,6 +132,7 @@ const rows = computed(() => {
       combo: c,
       target: tgtOf(c, cfv),
       feature: ftrOf(c, cfv),
+      estimate: ests.find((e) => e.x_feature === c.x_feature && e.y_target === c.y_target && sameCfv(e.category_feature_value, cfv)) || null,
       dcSpec: dcSpec(c.x_feature),
       stats: statsByCombo.value[comboKey(c.x_feature, c.y_target, cfv)] || null,
       thin: isThin(c, minN),
@@ -180,6 +183,9 @@ function specFor(xf, yt, cfv) {
           <p class="sub">{{ condSummary || 'feature × target 조합별 process window' }}</p>
         </div>
         <div class="meta">
+          <label class="esttog" :class="{ on: showEstimate }" title="미관측 wafer의 추정 y를 시계열에 표시 (y~x 회귀, 관측값과 다른 표식). 분리 모드 적용">
+            <input type="checkbox" v-model="showEstimate" /> 추정 y
+          </label>
           <span class="badge" :class="status">{{ status }}</span>
           <span v-if="lastQueryAt" class="qt">조회 {{ lastQueryAt }}</span>
         </div>
@@ -207,6 +213,7 @@ function specFor(xf, yt, cfv) {
         <ComboRow v-for="r in rows" :key="r.key" :combo="r.combo"
                   :target="r.target" :feature="r.feature" :stats="r.stats"
                   :multi="r.multi" :members="r.members"
+                  :estimate="r.estimate" :show-estimate="showEstimate"
                   :spec="specByCombo[r.key]" :dc-spec="r.dcSpec" :thin="r.thin"
                   :min-n="columns?.min_n ?? 10" :sampled="timeseries?.sampled" />
       </section>
@@ -231,6 +238,9 @@ function specFor(xf, yt, cfv) {
 .sub { margin: 3px 0 0; font-size: 13px; color: var(--text-2); }
 .meta { display: flex; align-items: center; gap: 10px; }
 .qt { font-size: 12px; color: var(--text-2); }
+.esttog { display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: var(--text-2); padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px; background: #fff; cursor: pointer; }
+.esttog.on { color: var(--accent); border-color: var(--accent); background: var(--accent-weak); }
+.esttog input { width: 13px; height: 13px; accent-color: var(--accent); }
 .badge { font-size: 11px; font-weight: 600; padding: 4px 11px; border-radius: 999px; text-transform: uppercase; letter-spacing: .03em; background: #e5e7eb; color: #374151; }
 .badge.loaded { background: #dcfce7; color: #166534; }
 .badge.loading { background: #dbeafe; color: #1e40af; }

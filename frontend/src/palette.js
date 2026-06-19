@@ -11,6 +11,7 @@ export const PALETTE = {
   tsFeature: '#009E73', // 시계열 feature scatter (green)
   tsFeatureMa: '#CC79A7', // feature 이동평균 (purple)
   faint: 'rgba(17, 17, 26, 0.28)',
+  estimate: '#CC79A7', // 추정 y (속이 빈 다이아몬드로 관측값과 구분)
 }
 
 // 분할값(category feature) 오버레이용 범주 색 — multi-line 모드에서 값별 라인 구분.

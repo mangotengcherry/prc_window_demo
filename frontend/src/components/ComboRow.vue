@@ -14,6 +14,8 @@ const props = defineProps({
   stats: { type: Object, default: null },         // split: table row(μ·σ전체·σ단기)
   multi: { type: Boolean, default: false },        // 겹쳐보기 여부
   members: { type: Array, default: () => [] },     // multi: [{ cfv, combo, target, feature, stats, color }]
+  estimate: { type: Object, default: null },       // 분리 모드: { points, fit_summary }
+  showEstimate: { type: Boolean, default: false },
   spec: { type: Object, required: true },         // { lower, upper } (양방향 바인딩 대상, 공유)
   dcSpec: { type: Object, default: () => ({}) },  // { lower, upper } feature별 DC spec
   thin: { type: Boolean, default: false },        // 표본 부족(신뢰 낮음)
@@ -102,7 +104,7 @@ const ck = (v) => (v == null ? '' : (v < 1 ? 'bad' : (v < 1.33 ? 'warn' : 'good'
       <div class="cell">
         <div class="cap">시계열 (trackout_time)</div>
         <ComboTimeSeries v-if="!multi"
-          :target="target" :feature="feature"
+          :target="target" :feature="feature" :estimate="estimate" :show-estimate="showEstimate"
           :y-target="combo.y_target" :x-feature="xName" :spec="spec" :dc-spec="dcSpec" :sampled="sampled" />
         <ComboTimeSeries v-else
           :groups="tsGroups"
