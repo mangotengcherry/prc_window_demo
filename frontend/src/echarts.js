@@ -11,6 +11,8 @@ import {
   DataZoomComponent,
   AxisPointerComponent,
   VisualMapComponent,
+  BrushComponent,
+  ToolboxComponent,
 } from 'echarts/components'
 
 use([
@@ -27,4 +29,6 @@ use([
   DataZoomComponent,
   AxisPointerComponent,
   VisualMapComponent,
+  BrushComponent,
+  ToolboxComponent,
 ])

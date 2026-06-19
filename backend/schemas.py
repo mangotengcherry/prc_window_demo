@@ -28,6 +28,12 @@ class TargetGroup(BaseModel):
     agg: str = "sum"  # 현재 sum만 지원
 
 
+class Selection(BaseModel):
+    """linked brushing — 선택 wafer로만 재집계 (window·table)."""
+    time_range: Optional[List[str]] = None  # [start_iso, end_iso], fab_track_out_time 기준
+    wafer_ids: Optional[List[str]] = None
+
+
 # ---------- /api/columns ----------
 class ColumnsResponse(BaseModel):
     line_ids: List[str]
@@ -84,6 +90,7 @@ class BinnedRequest(BaseModel):
     bins: int = 10
     y_target_groups: List[TargetGroup] = []
     category_feature: Optional[CategoryFeatureSel] = None
+    selection: Optional[Selection] = None
 
 
 class Bin(BaseModel):
@@ -204,6 +211,7 @@ class TableRequest(BaseModel):
     y_targets: List[str]
     y_target_groups: List[TargetGroup] = []
     category_feature: Optional[CategoryFeatureSel] = None
+    selection: Optional[Selection] = None
 
 
 class TableRow(BaseModel):

@@ -50,6 +50,25 @@ def _cf_splits(sub: pd.DataFrame, cf):
     return [(None, None, sub)]
 
 
+def _apply_selection(df: pd.DataFrame, sel) -> pd.DataFrame:
+    """linked brushing — 선택 시간구간/wafer로 한정."""
+    if sel is None:
+        return df
+    tr = getattr(sel, "time_range", None)
+    if tr and len(tr) == 2:
+        def _naive(x):
+            t = pd.Timestamp(x)
+            return t.tz_localize(None) if t.tzinfo is not None else t  # df는 tz-naive
+        s, e = _naive(tr[0]), _naive(tr[1])
+        if s > e:
+            s, e = e, s
+        df = df[(df["fab_track_out_time"] >= s) & (df["fab_track_out_time"] <= e)]
+    wids = getattr(sel, "wafer_ids", None)
+    if wids:
+        df = df[df["wafer_id"].isin(wids)]
+    return df
+
+
 def _apply_target_date(sub: pd.DataFrame, tdr) -> pd.DataFrame:
     """y target 확보 시점(eds_tkout_time) 기준 추가 필터."""
     if tdr is None:
@@ -134,6 +153,7 @@ def compute_binned(req) -> dict:
     df = _with_target_groups(D.load_dataframe(), getattr(req, "y_target_groups", None))
     sub = _filter_rows(df, line_id=req.line_id, product=req.product,
                        fab_step=req.fab_step, date_range=req.date_range)
+    sub = _apply_selection(sub, getattr(req, "selection", None))  # linked brushing
     # observed-only + y target 확보 시점 필터
     sub = _apply_target_date(sub[sub["observed"]], req.target_date_range)
 
@@ -290,6 +310,7 @@ def compute_table(req) -> dict:
     df = _with_target_groups(D.load_dataframe(), getattr(req, "y_target_groups", None))
     base = _filter_rows(df, line_id=req.line_id, product=req.product,
                         fab_step=req.fab_step, date_range=req.date_range)
+    base = _apply_selection(base, getattr(req, "selection", None))  # linked brushing
     base = _apply_target_date(base[base["observed"]], req.target_date_range)
     dcs = D.dc_spec()
     splits = _cf_splits(base, getattr(req, "category_feature", None))
