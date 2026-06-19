@@ -8,6 +8,7 @@ import InteractionPanel from './components/InteractionPanel.vue'
 import { fetchColumns, fetchXFeatureOptions, fetchBinned, fetchTimeseries, fetchTable } from './api/client.js'
 import { cpk } from './stats.js'
 import { SERIES } from './palette.js'
+import { queryId, shareUrl, condFromUrl } from './share.js'
 
 const columns = ref(null)
 const xFeatureOptions = ref([])
@@ -22,6 +23,8 @@ const errorMsg = ref('')
 const lastCond = ref(null)
 const lastQueryAt = ref('')
 const showEstimate = ref(false) // 미관측 wafer 추정 y 표시(분리 모드 시계열)
+const initialCond = ref(condFromUrl()) // 공유 URL(?q=)로 들어온 경우 복원
+const copied = ref(false)
 
 const comboKey = (xf, yt, cfv) => `${xf}__${yt}__${cfv || ''}`
 
@@ -169,12 +172,35 @@ function specFor(xf, yt, cfv) {
   const multi = lastCond.value?.category_feature?.chart_mode === 'multi_line'
   return specByCombo[comboKey(xf, yt, multi ? null : cfv)] || {}
 }
+
+// provenance(출처·기간·표본·쿼리ID) + 공유 링크
+const provenance = computed(() => {
+  const c = lastCond.value
+  if (!c) return null
+  const tb = timeseries.value?.time_basis
+  return {
+    source: `demo · ${c.line_id}/${c.product} · ${c.category}/${c.eds_step} · ${c.fab_step}`,
+    fabRange: `${c.date_range.start_date} ~ ${c.date_range.end_date}`,
+    edsRange: c.target_date_range ? `${c.target_date_range.start_date} ~ ${c.target_date_range.end_date}` : '-',
+    n: timeseries.value?.n_total ?? '-',
+    qid: queryId(c),
+    lagDays: tb?.expected_target_lag_days ?? null,
+  }
+})
+async function copyShare() {
+  if (!lastCond.value) return
+  try {
+    await navigator.clipboard.writeText(shareUrl(lastCond.value))
+    copied.value = true
+    setTimeout(() => { copied.value = false }, 1500)
+  } catch { /* clipboard 미지원/거부 시 무시 */ }
+}
 </script>
 
 <template>
   <div class="layout">
     <Sidebar :columns="columns" :x-feature-options="xFeatureOptions" :loading="status === 'loading'"
-             @xopts-change="onXoptsChange" @draw="onDraw" />
+             :initial="initialCond" @xopts-change="onXoptsChange" @draw="onDraw" />
 
     <main class="main">
       <header class="topbar">
@@ -190,6 +216,16 @@ function specFor(xf, yt, cfv) {
           <span v-if="lastQueryAt" class="qt">조회 {{ lastQueryAt }}</span>
         </div>
       </header>
+
+      <div v-if="provenance" class="prov">
+        <span><b>출처</b> {{ provenance.source }}</span>
+        <span><b>분석기간(fab)</b> {{ provenance.fabRange }}</span>
+        <span><b>y확보(eds)</b> {{ provenance.edsRange }}</span>
+        <span><b>표본</b> {{ provenance.n }}</span>
+        <span><b>쿼리</b> {{ provenance.qid }}</span>
+        <span v-if="provenance.lagDays" class="lag" :title="`EDS lag ${provenance.lagDays}일 — 최근 ${provenance.lagDays}일 wafer는 미관측이라 window/Cpk 집계에서 빠집니다`">⚠ window는 ~{{ provenance.lagDays }}일 이전 기준</span>
+        <button class="copy" @click="copyShare">{{ copied ? '복사됨 ✓' : '🔗 링크 복사' }}</button>
+      </div>
 
       <p v-if="status === 'error'" class="banner err">⚠ {{ errorMsg }}</p>
       <p v-else-if="status === 'loading'" class="banner">불러오는 중…</p>
@@ -246,6 +282,11 @@ function specFor(xf, yt, cfv) {
 .badge.loading { background: #dbeafe; color: #1e40af; }
 .badge.error { background: #fee2e2; color: #991b1b; }
 .badge.empty { background: #fef9c3; color: #854d0e; }
+.prov { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin: 6px 32px 0; padding: 8px 14px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; font-size: 11.5px; color: var(--text-2); }
+.prov b { font-weight: 700; color: var(--text); font-weight: 600; margin-right: 3px; }
+.prov .lag { color: #92400e; background: #fef3c7; padding: 1px 8px; border-radius: 999px; font-weight: 600; cursor: help; }
+.prov .copy { margin-left: auto; padding: 5px 11px; font-size: 11.5px; font-weight: 600; color: var(--accent); background: #fff; border: 1px solid var(--accent); border-radius: 8px; cursor: pointer; }
+.prov .copy:hover { background: var(--accent-weak); }
 .banner { margin: 6px 32px; font-size: 14px; color: var(--text-2); }
 .banner.err { color: #d70015; }
 .kpis { display: flex; gap: 12px; padding: 8px 32px 2px; flex-wrap: wrap; }

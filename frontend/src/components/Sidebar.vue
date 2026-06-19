@@ -1,12 +1,13 @@
 <script setup>
 // 좌측 조건 패널 (M0): Line/제품/Category/EDS_STEP/FAB_STEP/기간 + X feature/Y target 다중선택.
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import TargetGroupingDialog from './TargetGroupingDialog.vue'
 
 const props = defineProps({
   columns: { type: Object, default: null },        // /api/columns 응답
   xFeatureOptions: { type: Array, default: () => [] },
   loading: { type: Boolean, default: false },
+  initial: { type: Object, default: null },        // 공유 URL(?q=) 복원 조건
 })
 const emit = defineEmits(['xopts-change', 'draw'])
 
@@ -37,7 +38,8 @@ const categoryFeature = ref('')   // '' = 없음 (ECO/PPID/EQP_MODEL/EQP/EQP_CH)
 const categoryValues = ref([])    // 표시할 category feature 값
 const chartMode = ref('split')    // split | multi_line (multi_line은 다음 단계)
 
-// 컬럼 도착 시 기본값
+// 컬럼 도착 시 기본값 (공유 URL 복원 시엔 그 값으로 덮어쓰고 자동 작성)
+let restored = false
 watch(() => props.columns, (c) => {
   if (!c) return
   lineId.value = c.line_ids?.[0] || ''
@@ -49,7 +51,34 @@ watch(() => props.columns, (c) => {
   endDate.value = c.date_default?.end_date || ''
   yStartDate.value = c.target_date_default?.start_date || ''
   yEndDate.value = c.target_date_default?.end_date || ''
+  if (props.initial && !restored) { restored = true; applyInitial(props.initial) }
 }, { immediate: true })
+
+async function applyInitial(i) {
+  // 1) 스칼라 먼저 (fabStep watcher가 xFeatures를 비우므로 선택은 뒤에서 복원)
+  if (i.line_id) lineId.value = i.line_id
+  if (i.product) product.value = i.product
+  if (i.category) category.value = i.category
+  if (i.eds_step) edsStep.value = i.eds_step
+  if (i.fab_step) fabStep.value = i.fab_step
+  if (i.date_range) { startDate.value = i.date_range.start_date; endDate.value = i.date_range.end_date }
+  if (i.target_date_range) { yStartDate.value = i.target_date_range.start_date; yEndDate.value = i.target_date_range.end_date }
+  if (Array.isArray(i.y_target_groups)) {
+    i.y_target_groups.forEach((g) => { if (!targetGroups.value.some((x) => x.name === g.name)) targetGroups.value.push(g) })
+  }
+  await nextTick()
+  // 2) fabStep/category watcher 처리 후 선택·분할 복원
+  if (Array.isArray(i.x_features)) xFeatures.value = [...i.x_features]
+  if (Array.isArray(i.y_targets)) yTargets.value = [...i.y_targets]
+  if (i.category_feature && i.category_feature.name) {
+    categoryFeature.value = i.category_feature.name
+    chartMode.value = i.category_feature.chart_mode || 'split'
+    await nextTick()  // categoryFeature watcher(값 전체 자동선택) 이후 복원
+    categoryValues.value = [...(i.category_feature.values || [])]
+  }
+  await nextTick()
+  if (valid.value) onDraw()
+}
 
 // fab_step / matching / metro 필터가 바뀌면 부모가 x-feature-options 재요청
 watch([fabStep, matching, metroGrade, metroCategory], () => {
