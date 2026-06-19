@@ -117,6 +117,7 @@ class TimeseriesRequest(BaseModel):
     fab_step: str
     x_features: List[str]
     y_targets: List[str]
+    category_feature: Optional[CategoryFeatureSel] = None
 
 
 class TimeBasis(BaseModel):
@@ -136,6 +137,7 @@ class TargetSeries(BaseModel):
     name: str
     display_name: str
     unit: str = ""
+    category_feature_value: Optional[str] = None
     observed_points: List[TimePoint]
     estimated_points: List[TimePoint] = []
     fit_summary: Optional[Dict[str, Any]] = None
@@ -147,6 +149,7 @@ class FeatureSeries(BaseModel):
     name: str
     display_name: str
     unit: str = ""
+    category_feature_value: Optional[str] = None
     points: list  # [[iso, value], ...]
     avg: Optional[float] = None
     control_limits: Optional[Dict[str, float]] = None
@@ -172,6 +175,7 @@ class TableRequest(BaseModel):
     fab_step: str
     x_features: List[str]
     y_targets: List[str]
+    category_feature: Optional[CategoryFeatureSel] = None
 
 
 class TableRow(BaseModel):

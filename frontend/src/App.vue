@@ -64,27 +64,30 @@ async function onDraw(cond) {
 
 const dcSpec = (xf) => columns.value?.dc_spec?.[xf] || {}
 
-// 조합(feature×target) → table 통계 매칭 (μ·σ_overall·σ_within·DC spec)
+// 조합(feature×target×분할값) → table 통계 매칭 (μ·σ_overall·σ_within·DC spec)
 const statsByCombo = computed(() => {
   const m = {}
-  tableRows.value.forEach((r) => { m[`${r.x_feature}__${r.y_target}`] = r })
+  tableRows.value.forEach((r) => { m[comboKey(r.x_feature, r.y_target, r.category_feature_value)] = r })
   return m
 })
+
+const sameCfv = (a, b) => (a ?? null) === (b ?? null)
 
 const rows = computed(() => {
   if (!binned.value || !timeseries.value) return []
   const minN = columns.value?.min_n ?? 10
   return binned.value.combos.map((c) => {
-    const tgt = timeseries.value.targets.find((s) => s.name === c.y_target)
-    const ftr = timeseries.value.features.find((s) => s.name === c.x_feature)
+    const cfv = c.category_feature_value
+    const tgt = timeseries.value.targets.find((s) => s.name === c.y_target && sameCfv(s.category_feature_value, cfv))
+    const ftr = timeseries.value.features.find((s) => s.name === c.x_feature && sameCfv(s.category_feature_value, cfv))
     const maxN = c.bins.length ? Math.max(...c.bins.map((b) => b.wafer_count)) : 0
     return {
-      key: comboKey(c.x_feature, c.y_target, c.category_feature_value),
+      key: comboKey(c.x_feature, c.y_target, cfv),
       combo: c,
       target: tgt || null,
       feature: ftr || null,
       dcSpec: dcSpec(c.x_feature),
-      stats: statsByCombo.value[`${c.x_feature}__${c.y_target}`] || null,
+      stats: statsByCombo.value[comboKey(c.x_feature, c.y_target, cfv)] || null,
       thin: c.bins.length > 0 && maxN < minN,
     }
   })
@@ -97,7 +100,7 @@ const kpis = computed(() => {
   const minN = columns.value?.min_n ?? 10
   let wDc = null, wU = null, thinN = 0
   rs.forEach((r) => {
-    const u = specFor(r.x_feature, r.y_target)
+    const u = specFor(r.x_feature, r.y_target, r.category_feature_value)
     const cDc = cpk(r.x_value, r.x_std_within, r.dc_lower, r.dc_upper)
     if (cDc != null) wDc = wDc == null ? cDc : Math.min(wDc, cDc)
     const cU = cpk(r.x_value, r.x_std_within, u.lower, u.upper)
@@ -114,7 +117,7 @@ const condSummary = computed(() => {
   return `${c.line_id} · ${c.product} · ${c.category}/${c.eds_step} · ${c.fab_step} · ${c.date_range.start_date}~${c.date_range.end_date}`
 })
 
-function specFor(xf, yt) { return specByCombo[comboKey(xf, yt)] || {} }
+function specFor(xf, yt, cfv) { return specByCombo[comboKey(xf, yt, cfv)] || {} }
 </script>
 
 <template>

@@ -30,6 +30,13 @@ def _within_std(vals) -> Optional[float]:
     return round(float(mr / 1.128), 4)
 
 
+def _cf_splits(sub: pd.DataFrame, cf):
+    """category feature 값별로 (name, value, subdf) 분할. 미선택 시 단일 (None, None, sub)."""
+    if cf and getattr(cf, "name", None) and getattr(cf, "values", None) and cf.name in sub.columns:
+        return [(cf.name, v, sub[sub[cf.name] == v]) for v in cf.values]
+    return [(None, None, sub)]
+
+
 def _apply_target_date(sub: pd.DataFrame, tdr) -> pd.DataFrame:
     """y target 확보 시점(eds_tkout_time) 기준 추가 필터."""
     if tdr is None:
@@ -117,10 +124,7 @@ def compute_binned(req) -> dict:
     # observed-only + y target 확보 시점 필터
     sub = _apply_target_date(sub[sub["observed"]], req.target_date_range)
 
-    cf = req.category_feature
-    splits = [(None, None, sub)]
-    if cf and cf.name and cf.values and cf.name in sub.columns:
-        splits = [(cf.name, v, sub[sub[cf.name] == v]) for v in cf.values]
+    splits = _cf_splits(sub, req.category_feature)
 
     combos = []
     truncated = False
@@ -160,38 +164,38 @@ def _control_limits(values: pd.Series):
 
 def compute_timeseries(req) -> dict:
     df = D.load_dataframe()
-    sub = _filter_rows(df, line_id=req.line_id, product=req.product,
-                       fab_step=req.fab_step, date_range=req.date_range).sort_values("fab_track_out_time")
-
-    targets = []
-    for yt in req.y_targets:
-        obs = _apply_target_date(sub[sub["observed"] & sub[yt].notna()], req.target_date_range)
-        observed_points = [{
-            "time": t.isoformat(), "value": round(float(v), 4),
-            "value_status": "observed", "observed_time": e.isoformat(),
-        } for t, v, e in zip(obs["fab_track_out_time"], obs[yt], obs["eds_tkout_time"])]
-        targets.append({
-            "name": yt, "display_name": yt, "unit": D.TARGET_UNIT.get(yt, ""),
-            "observed_points": observed_points,
-            "estimated_points": [],  # M0: 추정 미구현 (M2)
-            "fit_summary": None,
-            "avg": round(float(obs[yt].mean()), 4) if len(obs) else None,
-            "control_limits": _control_limits(obs[yt]) if len(obs) else None,
-        })
-
-    features = []
+    base = _filter_rows(df, line_id=req.line_id, product=req.product,
+                        fab_step=req.fab_step, date_range=req.date_range).sort_values("fab_track_out_time")
+    splits = _cf_splits(base, getattr(req, "category_feature", None))
     units = D.feature_unit_map()
-    for xf in req.x_features:
-        if xf not in sub.columns:
-            continue
-        fs = sub[sub[xf].notna()]
-        points = [[t.isoformat(), round(float(v), 4)] for t, v in zip(fs["fab_track_out_time"], fs[xf])]
-        features.append({
-            "name": xf, "display_name": _meta_for(xf).get("display_name", xf),
-            "unit": units.get(xf, ""), "points": points,
-            "avg": round(float(fs[xf].mean()), 4) if len(fs) else None,
-            "control_limits": _control_limits(fs[xf]) if len(fs) else None,
-        })
+
+    targets, features = [], []
+    for cf_name, cf_val, sub in splits:
+        for yt in req.y_targets:
+            obs = _apply_target_date(sub[sub["observed"] & sub[yt].notna()], req.target_date_range)
+            observed_points = [{
+                "time": t.isoformat(), "value": round(float(v), 4),
+                "value_status": "observed", "observed_time": e.isoformat(),
+            } for t, v, e in zip(obs["fab_track_out_time"], obs[yt], obs["eds_tkout_time"])]
+            targets.append({
+                "name": yt, "display_name": yt, "unit": D.TARGET_UNIT.get(yt, ""),
+                "category_feature_value": cf_val,
+                "observed_points": observed_points,
+                "estimated_points": [], "fit_summary": None,
+                "avg": round(float(obs[yt].mean()), 4) if len(obs) else None,
+                "control_limits": _control_limits(obs[yt]) if len(obs) else None,
+            })
+        for xf in req.x_features:
+            if xf not in sub.columns:
+                continue
+            fs = sub[sub[xf].notna()]
+            points = [[t.isoformat(), round(float(v), 4)] for t, v in zip(fs["fab_track_out_time"], fs[xf])]
+            features.append({
+                "name": xf, "display_name": _meta_for(xf).get("display_name", xf),
+                "unit": units.get(xf, ""), "category_feature_value": cf_val, "points": points,
+                "avg": round(float(fs[xf].mean()), 4) if len(fs) else None,
+                "control_limits": _control_limits(fs[xf]) if len(fs) else None,
+            })
 
     return {
         "fab_step": req.fab_step,
@@ -201,7 +205,7 @@ def compute_timeseries(req) -> dict:
             "expected_target_lag_days": D.TARGET_LAG_DAYS,
         },
         "sampled": False,
-        "n_total": int(len(sub)),
+        "n_total": int(len(base)),
         "targets": targets,
         "features": features,
     }
@@ -210,35 +214,37 @@ def compute_timeseries(req) -> dict:
 # ---------------- /api/table ----------------
 def compute_table(req) -> dict:
     df = D.load_dataframe()
-    sub = _filter_rows(df, line_id=req.line_id, product=req.product,
-                       fab_step=req.fab_step, date_range=req.date_range)
-    sub = _apply_target_date(sub[sub["observed"]], req.target_date_range)
+    base = _filter_rows(df, line_id=req.line_id, product=req.product,
+                        fab_step=req.fab_step, date_range=req.date_range)
+    base = _apply_target_date(base[base["observed"]], req.target_date_range)
     dcs = D.dc_spec()
+    splits = _cf_splits(base, getattr(req, "category_feature", None))
 
     rows = []
-    for xf in req.x_features:
-        meta = _meta_for(xf)
-        dc = dcs.get(xf, {})
-        for yt in req.y_targets:
-            s = sub[sub[xf].notna() & sub[yt].notna()] if xf in sub.columns else sub.iloc[0:0]
-            n = int(len(s))
-            x_within = _within_std(s.sort_values("fab_track_out_time")[xf].values) if n else None
-            rows.append({
-                "line_id": req.line_id, "product": req.product,
-                "category": req.category, "eds_step": req.eds_step, "fab_step": req.fab_step,
-                "x_feature": xf, "x_feature_display_name": meta.get("display_name", xf),
-                "x_value": round(float(s[xf].mean()), 4) if n else None,
-                "x_std": round(float(s[xf].std()), 4) if n > 1 else None,
-                "x_std_within": x_within,
-                "y_target": yt,
-                "y_value": round(float(s[yt].mean()), 4) if n else None,
-                "value_status": "observed",
-                "metro_step": meta.get("metro_step", ""), "metro_item": meta.get("metro_item", ""),
-                "metro_grade": meta.get("metro_grade", ""), "metro_category": meta.get("metro_category", ""),
-                "category_feature_name": None, "category_feature_value": None,
-                "dc_lower": dc.get("lower"), "dc_upper": dc.get("upper"),
-                "n": n,
-                "mean": round(float(s[yt].mean()), 4) if n else None,
-                "std": round(float(s[yt].std()), 4) if n > 1 else None,
-            })
+    for cf_name, cf_val, sub in splits:
+        for xf in req.x_features:
+            meta = _meta_for(xf)
+            dc = dcs.get(xf, {})
+            for yt in req.y_targets:
+                s = sub[sub[xf].notna() & sub[yt].notna()] if xf in sub.columns else sub.iloc[0:0]
+                n = int(len(s))
+                x_within = _within_std(s.sort_values("fab_track_out_time")[xf].values) if n else None
+                rows.append({
+                    "line_id": req.line_id, "product": req.product,
+                    "category": req.category, "eds_step": req.eds_step, "fab_step": req.fab_step,
+                    "x_feature": xf, "x_feature_display_name": meta.get("display_name", xf),
+                    "x_value": round(float(s[xf].mean()), 4) if n else None,
+                    "x_std": round(float(s[xf].std()), 4) if n > 1 else None,
+                    "x_std_within": x_within,
+                    "y_target": yt,
+                    "y_value": round(float(s[yt].mean()), 4) if n else None,
+                    "value_status": "observed",
+                    "metro_step": meta.get("metro_step", ""), "metro_item": meta.get("metro_item", ""),
+                    "metro_grade": meta.get("metro_grade", ""), "metro_category": meta.get("metro_category", ""),
+                    "category_feature_name": cf_name, "category_feature_value": cf_val,
+                    "dc_lower": dc.get("lower"), "dc_upper": dc.get("upper"),
+                    "n": n,
+                    "mean": round(float(s[yt].mean()), 4) if n else None,
+                    "std": round(float(s[yt].std()), 4) if n > 1 else None,
+                })
     return {"rows": rows}
