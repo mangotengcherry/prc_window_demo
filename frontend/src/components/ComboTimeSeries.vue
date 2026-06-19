@@ -19,6 +19,17 @@ const props = defineProps({
   dcSpec: { type: Object, default: () => ({ lower: null, upper: null }) },
   sampled: { type: Boolean, default: false },
 })
+const emit = defineEmits(['brush'])
+
+// 시계열 x축 기간 brush → 선택 구간(ISO) 또는 해제(null) 방출
+function onBrushEnd(params) {
+  const areas = params?.areas || []
+  if (!areas.length) { emit('brush', null); return }
+  const a = areas[0]
+  const cr = a.coordRange || (a.coordRanges && a.coordRanges[0])
+  if (!cr || cr.length !== 2) return
+  emit('brush', [new Date(cr[0]).toISOString(), new Date(cr[1]).toISOString()])
+}
 
 function movingAverage(points) {
   const n = points.length
@@ -50,6 +61,11 @@ function featLines() {
 const baseLayout = {
   axisPointer: { link: [{ xAxisIndex: 'all' }] },
   tooltip: { trigger: 'axis' },
+  toolbox: { show: true, right: 6, top: -4, itemSize: 13,
+    feature: { brush: { type: ['lineX', 'clear'], title: { lineX: '기간 선택', clear: '선택 해제' } } } },
+  brush: { xAxisIndex: [0, 1], brushType: 'lineX', brushMode: 'single', removeOnClick: true,
+    throttleType: 'debounce', throttleDelay: 350,
+    brushStyle: { color: 'rgba(79,70,229,0.10)', borderColor: 'rgba(79,70,229,0.45)' } },
   grid: [{ left: 58, right: 38, top: 42, height: '30%' }, { left: 58, right: 38, top: '56%', height: '30%' }],
   dataZoom: [
     { type: 'inside', xAxisIndex: [0, 1] },
@@ -143,7 +159,7 @@ const option = computed(() => (isMulti.value ? multiOption() : singleOption()))
       :title="`추정 y~x 회귀 · R²=${estInfo.r2 ?? '-'} · 적합 n=${estInfo.n} · 추정 ${estInfo.count}점` + (estInfo.weak ? ' · 적합도 낮음(참고용)' : '')">
       추정 R² {{ estInfo.r2 == null ? '-' : estInfo.r2.toFixed(2) }}{{ estInfo.weak ? ' ⚠' : '' }}
     </span>
-    <VChart v-if="hasData" class="chart" :option="option" autoresize />
+    <VChart v-if="hasData" class="chart" :option="option" autoresize @brushend="onBrushEnd" />
     <p v-else class="empty">시계열 데이터 없음</p>
   </div>
 </template>
@@ -151,7 +167,7 @@ const option = computed(() => (isMulti.value ? multiOption() : singleOption()))
 <style scoped>
 .ts { position: relative; height: 100%; }
 .ds { position: absolute; top: 2px; left: 56px; z-index: 2; font-size: 10px; font-weight: 600; color: #92400e; background: #fde68a; padding: 1px 7px; border-radius: 999px; }
-.est { position: absolute; top: 2px; right: 40px; z-index: 2; font-size: 10px; font-weight: 600; color: #6b21a8; background: #f3e8ff; padding: 1px 7px; border-radius: 999px; }
+.est { position: absolute; top: 2px; left: 56px; z-index: 2; font-size: 10px; font-weight: 600; color: #6b21a8; background: #f3e8ff; padding: 1px 7px; border-radius: 999px; }
 .est.weak { color: #92400e; background: #fde68a; }
 .chart { height: 400px; width: 100%; }
 .empty { height: 400px; display: flex; align-items: center; justify-content: center; color: #aaa; font-size: 13px; }

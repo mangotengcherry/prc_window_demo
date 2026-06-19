@@ -25,6 +25,7 @@ const lastQueryAt = ref('')
 const showEstimate = ref(false) // 미관측 wafer 추정 y 표시(분리 모드 시계열)
 const initialCond = ref(condFromUrl()) // 공유 URL(?q=)로 들어온 경우 복원
 const copied = ref(false)
+const selection = ref(null) // linked brushing: [startISO, endISO] | null
 
 const comboKey = (xf, yt, cfv) => `${xf}__${yt}__${cfv || ''}`
 
@@ -50,6 +51,7 @@ async function onDraw(cond) {
   if (status.value === 'loading') return // 중복요청 방지
   status.value = 'loading'
   errorMsg.value = ''
+  selection.value = null // 새 분석은 brush 선택 초기화
   try {
     const [b, t, tbl] = await Promise.all([fetchBinned(cond), fetchTimeseries(cond), fetchTable(cond)])
     binned.value = b
@@ -187,6 +189,23 @@ const provenance = computed(() => {
     lagDays: tb?.expected_target_lag_days ?? null,
   }
 })
+// linked brushing — 시계열 brush 구간으로 window·table 재집계 (시계열은 전체 유지)
+async function onBrush(range) {
+  selection.value = range
+  await reaggregate()
+}
+async function reaggregate() {
+  if (!lastCond.value) return
+  try {
+    const cond = { ...lastCond.value, selection: selection.value ? { time_range: selection.value } : null }
+    const [b, tbl] = await Promise.all([fetchBinned(cond), fetchTable(cond)])
+    binned.value = b
+    tableRows.value = tbl.rows
+  } catch (e) { errorMsg.value = e.message || '재집계 실패' }
+}
+function clearSelection() { selection.value = null; reaggregate() }
+const selLabel = computed(() => selection.value ? `${selection.value[0].slice(0, 10)} ~ ${selection.value[1].slice(0, 10)}` : '')
+
 async function copyShare() {
   if (!lastCond.value) return
   try {
@@ -232,6 +251,11 @@ async function copyShare() {
       <p v-else-if="status === 'empty'" class="banner">조건에 해당하는 데이터가 없습니다. (기간/관측 여부를 확인하세요)</p>
       <p v-else-if="status === 'initial'" class="banner">왼쪽에서 분석 조건을 선택하고 "차트 작성"을 누르세요.</p>
 
+      <div v-if="selection" class="selbar">
+        <span>⏱ 기간 선택 <b>{{ selLabel }}</b> · window·요약표가 이 구간 wafer로 재집계됨 (시계열은 전체)</span>
+        <button @click="clearSelection">전체 보기</button>
+      </div>
+
       <section v-if="kpis" class="kpis">
         <div class="kpi" title="현재 표시된 (feature × target) 조합 수">
           <span class="kv">{{ kpis.combos }}</span><span class="kl">조합 ⓘ</span></div>
@@ -251,7 +275,7 @@ async function copyShare() {
                   :multi="r.multi" :members="r.members"
                   :estimate="r.estimate" :show-estimate="showEstimate"
                   :spec="specByCombo[r.key]" :dc-spec="r.dcSpec" :thin="r.thin"
-                  :min-n="columns?.min_n ?? 10" :sampled="timeseries?.sampled" />
+                  :min-n="columns?.min_n ?? 10" :sampled="timeseries?.sampled" @brush="onBrush" />
       </section>
 
       <section v-if="tableRows.length" class="table-area">
@@ -287,6 +311,9 @@ async function copyShare() {
 .prov .lag { color: #92400e; background: #fef3c7; padding: 1px 8px; border-radius: 999px; font-weight: 600; cursor: help; }
 .prov .copy { margin-left: auto; padding: 5px 11px; font-size: 11.5px; font-weight: 600; color: var(--accent); background: #fff; border: 1px solid var(--accent); border-radius: 8px; cursor: pointer; }
 .prov .copy:hover { background: var(--accent-weak); }
+.selbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 8px 32px 0; padding: 8px 14px; background: var(--accent-weak); border: 1px solid var(--accent); border-radius: 10px; font-size: 12.5px; color: var(--text); }
+.selbar b { color: var(--accent); }
+.selbar button { padding: 5px 12px; font-size: 12px; font-weight: 600; color: #fff; background: var(--accent); border: none; border-radius: 8px; cursor: pointer; white-space: nowrap; }
 .banner { margin: 6px 32px; font-size: 14px; color: var(--text-2); }
 .banner.err { color: #d70015; }
 .kpis { display: flex; gap: 12px; padding: 8px 32px 2px; flex-wrap: wrap; }

@@ -22,6 +22,7 @@ const props = defineProps({
   minN: { type: Number, default: 10 },
   sampled: { type: Boolean, default: false },
 })
+defineEmits(['brush'])
 
 const xName = props.combo.x_feature_display_name || props.combo.x_feature
 
@@ -105,10 +106,12 @@ const ck = (v) => (v == null ? '' : (v < 1 ? 'bad' : (v < 1.33 ? 'warn' : 'good'
         <div class="cap">시계열 (trackout_time)</div>
         <ComboTimeSeries v-if="!multi"
           :target="target" :feature="feature" :estimate="estimate" :show-estimate="showEstimate"
-          :y-target="combo.y_target" :x-feature="xName" :spec="spec" :dc-spec="dcSpec" :sampled="sampled" />
+          :y-target="combo.y_target" :x-feature="xName" :spec="spec" :dc-spec="dcSpec" :sampled="sampled"
+          @brush="$emit('brush', $event)" />
         <ComboTimeSeries v-else
           :groups="tsGroups"
-          :y-target="combo.y_target" :x-feature="xName" :spec="spec" :dc-spec="dcSpec" :sampled="sampled" />
+          :y-target="combo.y_target" :x-feature="xName" :spec="spec" :dc-spec="dcSpec" :sampled="sampled"
+          @brush="$emit('brush', $event)" />
       </div>
     </div>
   </div>
