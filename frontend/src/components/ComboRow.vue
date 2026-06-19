@@ -1,17 +1,20 @@
 <script setup>
-// 한 조합(feature × target)의 한 행: [spec 입력 헤더] + [Window 차트 | 매칭 시계열 차트]
-// spec은 이 조합 전용. window(수직선)과 시계열(수평선)에 동시에 반영된다.
+// 한 조합의 한 행. 두 가지 모드:
+//  - 분리(split): (feature × target × 분할값) 단일 조합. spec은 이 조합 전용.
+//  - 겹쳐보기(multi): (feature × target) 한 행에 분할값들을 추세선으로 겹쳐 비교. spec은 공유.
 import { computed } from 'vue'
 import WindowChart from './WindowChart.vue'
 import ComboTimeSeries from './ComboTimeSeries.vue'
 import { cpk, inSpecPct } from '../stats.js'
 
 const props = defineProps({
-  combo: { type: Object, required: true },        // { x_feature, y_target, bins, ... }
-  target: { type: Object, default: null },        // timeseries target series 객체
-  feature: { type: Object, default: null },       // timeseries feature series 객체
-  stats: { type: Object, default: null },         // table row: x_value(μ)·x_std(σ전체)·x_std_within(σ단기)
-  spec: { type: Object, required: true },         // { lower, upper } (양방향 바인딩 대상)
+  combo: { type: Object, required: true },        // { x_feature, x_feature_display_name, y_target, ... }
+  target: { type: Object, default: null },        // split: timeseries target series
+  feature: { type: Object, default: null },       // split: timeseries feature series
+  stats: { type: Object, default: null },         // split: table row(μ·σ전체·σ단기)
+  multi: { type: Boolean, default: false },        // 겹쳐보기 여부
+  members: { type: Array, default: () => [] },     // multi: [{ cfv, combo, target, feature, stats, color }]
+  spec: { type: Object, required: true },         // { lower, upper } (양방향 바인딩 대상, 공유)
   dcSpec: { type: Object, default: () => ({}) },  // { lower, upper } feature별 DC spec
   thin: { type: Boolean, default: false },        // 표본 부족(신뢰 낮음)
   minN: { type: Number, default: 10 },
@@ -20,7 +23,7 @@ const props = defineProps({
 
 const xName = props.combo.x_feature_display_name || props.combo.x_feature
 
-// capability — Cpk(단기 σ) / Ppk(전체 σ), DC spec / user spec 기준
+// 분리 모드 capability — Cpk(단기 σ) / Ppk(전체 σ), DC spec / user spec 기준
 const hasUser = computed(() => props.spec?.lower != null && props.spec?.upper != null)
 const cap = computed(() => {
   const s = props.stats || {}
@@ -32,6 +35,19 @@ const cap = computed(() => {
     inspecU: inSpecPct(mu, so, u.lower, u.upper),
   }
 })
+
+// 겹쳐보기 모드 — 분할값별 Cpk 요약 + 차트에 넘길 groups
+const memberCaps = computed(() => props.members.map((m) => {
+  const s = m.stats || {}
+  return {
+    cfv: m.cfv, color: m.color,
+    cpkDc: cpk(s.x_value, s.x_std_within, props.dcSpec?.lower, props.dcSpec?.upper),
+    cpkU: cpk(s.x_value, s.x_std_within, props.spec?.lower, props.spec?.upper),
+  }
+}))
+const windowGroups = computed(() => props.members.map((m) => ({ label: m.cfv, color: m.color, bins: m.combo.bins })))
+const tsGroups = computed(() => props.members.map((m) => ({ label: m.cfv, color: m.color, target: m.target, feature: m.feature })))
+
 const f2 = (v) => (v == null ? '-' : v.toFixed(2))
 const pct = (v) => (v == null ? '-' : (v * 100).toFixed(1) + '%')
 const ck = (v) => (v == null ? '' : (v < 1 ? 'bad' : (v < 1.33 ? 'warn' : 'good')))
@@ -41,7 +57,8 @@ const ck = (v) => (v == null ? '' : (v < 1 ? 'bad' : (v < 1.33 ? 'warn' : 'good'
   <div class="combo-row">
     <div class="header">
       <span class="title">{{ xName }} × {{ combo.y_target }}
-        <span v-if="combo.category_feature_value" class="cf">· {{ combo.category_feature_value }}</span>
+        <span v-if="multi" class="cf">· 겹쳐보기 {{ members.length }}</span>
+        <span v-else-if="combo.category_feature_value" class="cf">· {{ combo.category_feature_value }}</span>
         <span v-if="thin" class="thin" title="표본 부족 — 신뢰도 낮음">thin</span>
       </span>
       <span class="spec">
@@ -51,7 +68,8 @@ const ck = (v) => (v == null ? '' : (v < 1 ? 'bad' : (v < 1.33 ? 'warn' : 'good'
       </span>
     </div>
 
-    <div class="cap-strip">
+    <!-- 분리 모드 capability -->
+    <div v-if="!multi" class="cap-strip">
       <span class="cg" title="DC spec 기준 — user 입력 없이 항상 산출. Cpk=단기 σ(MR/1.128), Ppk=전체 σ">vs DC</span>
       <span>Cpk <b :class="ck(cap.cpkDc)">{{ f2(cap.cpkDc) }}</b></span>
       <span>Ppk <b :class="ck(cap.ppkDc)">{{ f2(cap.ppkDc) }}</b></span>
@@ -65,17 +83,30 @@ const ck = (v) => (v == null ? '' : (v < 1 ? 'bad' : (v < 1.33 ? 'warn' : 'good'
       <span v-else class="hint">· user spec 입력 시 user 기준 capability 표시</span>
     </div>
 
+    <!-- 겹쳐보기 모드: 분할값별 Cpk 비교 -->
+    <div v-else class="cap-strip">
+      <span class="cg" title="분할값별 Cpk(단기 σ). user spec 입력 시 user 기준 추가 표시">분할별 Cpk</span>
+      <span v-for="mc in memberCaps" :key="mc.cfv" class="mcap">
+        <i class="sw" :style="{ background: mc.color }"></i>{{ mc.cfv }}
+        <b :class="ck(mc.cpkDc)" title="DC spec 기준">{{ f2(mc.cpkDc) }}</b>
+        <b v-if="hasUser" :class="ck(mc.cpkU)" title="user spec 기준">/ {{ f2(mc.cpkU) }}</b>
+      </span>
+    </div>
+
     <div class="charts">
       <div class="cell">
         <div class="cap">Window</div>
-        <WindowChart :bins="combo.bins" :x-feature="xName" :y-target="combo.y_target" :spec="spec" :dc-spec="dcSpec" :min-n="minN" />
+        <WindowChart v-if="!multi" :bins="combo.bins" :x-feature="xName" :y-target="combo.y_target" :spec="spec" :dc-spec="dcSpec" :min-n="minN" />
+        <WindowChart v-else :groups="windowGroups" :x-feature="xName" :y-target="combo.y_target" :spec="spec" :dc-spec="dcSpec" :min-n="minN" />
       </div>
       <div class="cell">
         <div class="cap">시계열 (trackout_time)</div>
-        <ComboTimeSeries
+        <ComboTimeSeries v-if="!multi"
           :target="target" :feature="feature"
-          :y-target="combo.y_target" :x-feature="xName" :spec="spec" :dc-spec="dcSpec" :sampled="sampled"
-        />
+          :y-target="combo.y_target" :x-feature="xName" :spec="spec" :dc-spec="dcSpec" :sampled="sampled" />
+        <ComboTimeSeries v-else
+          :groups="tsGroups"
+          :y-target="combo.y_target" :x-feature="xName" :spec="spec" :dc-spec="dcSpec" :sampled="sampled" />
       </div>
     </div>
   </div>
@@ -94,6 +125,8 @@ const ck = (v) => (v == null ? '' : (v < 1 ? 'bad' : (v < 1.33 ? 'warn' : 'good'
 .cap-strip .cg { font-weight: 700; color: var(--text); text-transform: uppercase; font-size: 10px; letter-spacing: .04em; cursor: help; }
 .cap-strip .div { color: var(--border); }
 .cap-strip .hint { color: #aaa; }
+.mcap { display: inline-flex; align-items: center; gap: 5px; }
+.mcap .sw { width: 9px; height: 9px; border-radius: 3px; display: inline-block; }
 .header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
 .title { font-size: 16px; font-weight: 600; color: var(--text); letter-spacing: -0.01em; display: flex; align-items: center; gap: 8px; }
 .cf { font-size: 12px; font-weight: 500; color: var(--accent); }
