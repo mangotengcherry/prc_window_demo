@@ -9,6 +9,7 @@ import data as D
 from schemas import (
     BinnedRequest, BinnedResponse,
     ColumnsResponse,
+    InteractionRequest, InteractionResponse,
     TableRequest, TableResponse,
     TimeseriesRequest, TimeseriesResponse,
     XFeatureOptionsResponse,
@@ -82,3 +83,8 @@ def post_timeseries(req: TimeseriesRequest):
 @app.post("/api/table", response_model=TableResponse)
 def post_table(req: TableRequest):
     return analytics.compute_table(req)
+
+
+@app.post("/api/interaction", response_model=InteractionResponse)
+def post_interaction(req: InteractionRequest):
+    return analytics.compute_interaction(req)
