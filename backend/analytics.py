@@ -261,3 +261,90 @@ def compute_table(req) -> dict:
                     "std": round(float(s[yt].std()), 4) if n > 1 else None,
                 })
     return {"rows": rows}
+
+
+# ---------------- /api/interaction ----------------
+SCATTER_CAP = 3000   # E: scatter 점수 캡 (timeseries와 동일 원칙)
+RANK_CAP = 50        # rank table 상한
+
+
+def _edges(vals: pd.Series, nbins: int, rng):
+    lo, hi = (float(rng[0]), float(rng[1])) if rng and len(rng) == 2 else (float(vals.min()), float(vals.max()))
+    if not np.isfinite(lo) or not np.isfinite(hi) or hi <= lo:
+        hi = lo + 1e-9
+    return np.linspace(lo, hi, nbins + 1)
+
+
+def _label(edges, i):
+    return f"{edges[i]:.4g} – {edges[i + 1]:.4g}"
+
+
+def _empty_interaction(req):
+    return {"x_feature": req.x_feature, "y_feature": req.y_feature, "value_field": req.value_field,
+            "aggregation": req.aggregation, "sampled": False, "n_total": 0,
+            "scatter_points": [], "heatmap_cells": [], "rank_rows": []}
+
+
+def compute_interaction(req) -> dict:
+    df = _with_target_groups(D.load_dataframe(), getattr(req, "y_target_groups", None))
+    sub = _filter_rows(df, line_id=req.line_id, product=req.product,
+                       fab_step=req.fab_step, date_range=req.date_range)
+    sub = _apply_target_date(sub, req.target_date_range)
+
+    xf, yf, vf = req.x_feature, req.y_feature, req.value_field
+    use_count = vf == "__count__"
+    need = [xf, yf] + ([] if use_count else [vf])
+    if any(c not in sub.columns for c in need):
+        return _empty_interaction(req)
+
+    mask = sub[xf].notna() & sub[yf].notna()
+    if not use_count:
+        mask &= sub[vf].notna()
+    s = sub[mask]
+    # range는 분석 창(zoom): 범위 밖 wafer는 제외
+    if req.x_range and len(req.x_range) == 2:
+        s = s[(s[xf] >= req.x_range[0]) & (s[xf] <= req.x_range[1])]
+    if req.y_range and len(req.y_range) == 2:
+        s = s[(s[yf] >= req.y_range[0]) & (s[yf] <= req.y_range[1])]
+    n_total = int(len(s))
+    if n_total == 0:
+        return _empty_interaction(req)
+
+    # scatter (캡 초과 시 균등 샘플)
+    sampled = n_total > SCATTER_CAP
+    ss = s.sample(SCATTER_CAP, random_state=0) if sampled else s
+    scatter = [{"x": round(float(x), 4), "y": round(float(y), 4),
+                "value": None if use_count else round(float(v), 4)}
+               for x, y, v in zip(ss[xf], ss[yf], (ss[xf] if use_count else ss[vf]))]
+
+    # heatmap binning
+    xe = _edges(s[xf], req.x_bins, req.x_range)
+    ye = _edges(s[yf], req.y_bins, req.y_range)
+    xi = np.clip(np.digitize(s[xf].to_numpy(), xe) - 1, 0, req.x_bins - 1)
+    yi = np.clip(np.digitize(s[yf].to_numpy(), ye) - 1, 0, req.y_bins - 1)
+
+    g = pd.DataFrame({"xi": xi, "yi": yi, "v": (np.ones(n_total) if use_count else s[vf].to_numpy())})
+    cells = []
+    for (bx, by), grp in g.groupby(["xi", "yi"], observed=True):
+        cnt = int(len(grp))
+        if use_count:
+            val = float(cnt)
+        elif req.aggregation == "median":
+            val = float(grp["v"].median())
+        else:
+            val = float(grp["v"].mean())
+        cells.append({
+            "x_bin": int(bx), "y_bin": int(by),
+            "x_bin_label": _label(xe, int(bx)), "y_bin_label": _label(ye, int(by)),
+            "value": round(val, 4), "count": cnt,
+        })
+
+    ranked = sorted(cells, key=lambda c: (c["value"] is None, -(c["value"] if c["value"] is not None else 0)))
+    rank_rows = [{"rank": i + 1, "x_bin_label": c["x_bin_label"], "y_bin_label": c["y_bin_label"],
+                  "aggregation": c["value"], "count": c["count"]} for i, c in enumerate(ranked[:RANK_CAP])]
+
+    return {
+        "x_feature": xf, "y_feature": yf, "value_field": vf, "aggregation": req.aggregation,
+        "sampled": sampled, "n_total": n_total,
+        "scatter_points": scatter, "heatmap_cells": cells, "rank_rows": rank_rows,
+    }
