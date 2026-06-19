@@ -26,6 +26,9 @@ const xSort = ref('name') // name | score(영향도)
 const matching = ref(true)        // fab_metro_prc 매칭 필터 on/off
 const metroGrade = ref('')        // '' = 전체
 const metroCategory = ref('')
+const categoryFeature = ref('')   // '' = 없음 (ECO/PPID/EQP_MODEL/EQP/EQP_CH)
+const categoryValues = ref([])    // 표시할 category feature 값
+const chartMode = ref('split')    // split | multi_line (multi_line은 다음 단계)
 
 // 컬럼 도착 시 기본값
 watch(() => props.columns, (c) => {
@@ -55,6 +58,11 @@ watch(fabStep, () => { xFeatures.value = [] })
 const targetOptions = computed(() => props.columns?.targets_by_category?.[category.value] || [])
 // category 바뀌면 유효하지 않은 yTarget 제거
 watch(category, () => { yTargets.value = yTargets.value.filter((t) => targetOptions.value.includes(t)) })
+
+// 분할(category feature) — 선택 시 값별로 차트·행 분리
+const cfValueOptions = computed(() => props.columns?.category_feature_values?.[categoryFeature.value] || [])
+// 분할 인자 바뀌면 해당 값 전체를 기본 선택
+watch(categoryFeature, () => { categoryValues.value = [...cfValueOptions.value] })
 
 // matching/필터로 인해 현재 옵션 밖에 있는 '선택된' X feature (선택 유지 + 확인용)
 function keyDisplay(k) { const p = k.split('|'); return p.length >= 5 ? `${p[3]} / ${p[4]}` : k }
@@ -89,6 +97,9 @@ function onDraw() {
     target_date_range: { start_date: yStartDate.value, end_date: yEndDate.value, time_column: 'eds_tkout_time' },
     fab_step: fabStep.value,
     x_features: [...xFeatures.value], y_targets: [...yTargets.value], bins: 10,
+    category_feature: categoryFeature.value
+      ? { name: categoryFeature.value, values: [...categoryValues.value], chart_mode: chartMode.value }
+      : null,
   })
 }
 </script>
@@ -159,6 +170,22 @@ function onDraw() {
       </div>
     </section>
 
+    <section>
+      <h3>분할 <small v-if="categoryFeature">{{ categoryValues.length }}/{{ cfValueOptions.length }}</small></h3>
+      <select v-model="categoryFeature" class="mini full">
+        <option value="">없음 (분할 안 함)</option>
+        <option v-for="cf in columns?.category_features" :key="cf" :value="cf">{{ cf }}</option>
+      </select>
+      <template v-if="categoryFeature">
+        <div class="listbox sm">
+          <label v-for="v in cfValueOptions" :key="v" class="item" :class="{ on: categoryValues.includes(v) }">
+            <input type="checkbox" :value="v" v-model="categoryValues" /><span>{{ v }}</span>
+          </label>
+        </div>
+        <p class="muted">선택한 {{ categoryFeature }} 값별로 차트·테이블 행을 나눕니다.</p>
+      </template>
+    </section>
+
     <button class="draw" :disabled="!valid || loading" @click="onDraw">
       {{ loading ? '불러오는 중…' : '차트 작성' }}
     </button>
@@ -189,6 +216,7 @@ h3 small { font-size: 11px; font-weight: 600; color: var(--accent); background: 
 .tog.on { color: var(--accent); border-color: var(--accent); background: var(--accent-weak); }
 .tog input { width: 13px; height: 13px; accent-color: var(--accent); }
 .mini { flex: 1; min-width: 0; padding: 5px 6px; font-size: 11px; border-radius: 9px; border: 1px solid var(--border); background: #fff; color: var(--text); }
+.mini.full { flex: none; width: 100%; padding: 7px 9px; font-size: 13px; }
 .outside { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; padding: 6px 2px 0; }
 .olbl { font-size: 10px; font-weight: 700; color: #92400e; background: #fde68a; padding: 1px 7px; border-radius: 999px; }
 .ochip { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--text-2); background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px; }

@@ -1,13 +1,18 @@
 <script setup>
-// 요약 테이블 (M0): 행 = (fab_step × x_feature × y_target). metro 메타 + n + USL/USU/DSL/DSU + user/DC range.
+// 요약 테이블 (M0): 행 = (fab_step × x_feature × y_target × 분할값). metro 메타 + n + USL/USU/DSL/DSU + user/DC range.
+import { computed } from 'vue'
 import { cpk as cpkFn, inSpecPct } from '../stats.js'
 
 const props = defineProps({
   rows: { type: Array, default: () => [] },
-  specFor: { type: Function, default: () => ({}) }, // (xFeatureKey, yTarget) => { lower, upper }
+  specFor: { type: Function, default: () => ({}) }, // (xFeatureKey, yTarget, cfValue) => { lower, upper }
 })
 
-function us(r) { return props.specFor(r.x_feature, r.y_target) || {} }
+// 분할(category feature) 선택 시에만 분할값 컬럼 노출
+const hasCf = computed(() => props.rows.some((r) => r.category_feature_value != null))
+const cfName = computed(() => props.rows.find((r) => r.category_feature_name)?.category_feature_name || '분할')
+
+function us(r) { return props.specFor(r.x_feature, r.y_target, r.category_feature_value) || {} }
 function fmt(v) { return v == null ? '-' : v }
 function ratio(r) {
   const u = us(r)
@@ -32,6 +37,7 @@ function cpkClass(v) { return v == null ? '' : (v < 1 ? 'bad' : (v < 1.33 ? 'war
           <th>fab_step</th>
           <th title="metro_step · metro_item / subitem">x_feature</th>
           <th>y_target</th>
+          <th v-if="hasCf" :title="'분할 인자: ' + cfName">{{ cfName }}</th>
           <th title="관측 표본수">n</th>
           <th title="user spec lower">USL</th>
           <th title="user spec upper">USU</th>
@@ -50,6 +56,7 @@ function cpkClass(v) { return v == null ? '' : (v < 1 ? 'bad' : (v < 1.33 ? 'war
           <td>{{ r.fab_step }}</td>
           <td :title="r.x_feature"><span class="ms">{{ r.metro_step }}</span> · {{ r.x_feature_display_name }}</td>
           <td>{{ r.y_target }}</td>
+          <td v-if="hasCf"><span v-if="r.category_feature_value" class="cfv">{{ r.category_feature_value }}</span><span v-else>-</span></td>
           <td>{{ fmt(r.n) }}</td>
           <td>{{ fmt(us(r).lower) }}</td>
           <td>{{ fmt(us(r).upper) }}</td>
@@ -74,6 +81,7 @@ th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--bo
 th { background: var(--surface-2); color: var(--text-2); font-weight: 600; position: sticky; top: 0; text-transform: uppercase; letter-spacing: .03em; font-size: 11px; }
 th[title] { cursor: help; text-decoration: underline dotted rgba(0,0,0,.25); text-underline-offset: 3px; }
 .ms { color: var(--text-2); }
+.cfv { font-weight: 600; color: var(--accent); background: var(--accent-weak); padding: 2px 9px; border-radius: 999px; }
 tbody tr:last-child td { border-bottom: none; }
 tbody tr:hover { background: #f5f5f7; }
 .ratio { font-weight: 600; color: var(--accent); background: var(--accent-weak); padding: 2px 9px; border-radius: 999px; }
