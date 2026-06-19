@@ -67,6 +67,7 @@ async function onDraw(cond) {
 }
 
 const dcSpec = (xf) => columns.value?.dc_spec?.[xf] || {}
+const targetGroupDefs = computed(() => lastCond.value?.y_target_groups || [])
 
 // 조합(feature×target×분할값) → table 통계 매칭 (μ·σ_overall·σ_within·DC spec)
 const statsByCombo = computed(() => {
@@ -205,7 +206,7 @@ function specFor(xf, yt, cfv) {
 
       <section v-if="tableRows.length" class="table-area">
         <h3 class="pane-title">요약 테이블</h3>
-        <DataTable :rows="tableRows" :spec-for="specFor" />
+        <DataTable :rows="tableRows" :spec-for="specFor" :target-groups="targetGroupDefs" />
       </section>
     </main>
   </div>

@@ -1,6 +1,7 @@
 <script setup>
 // 좌측 조건 패널 (M0): Line/제품/Category/EDS_STEP/FAB_STEP/기간 + X feature/Y target 다중선택.
 import { ref, computed, watch } from 'vue'
+import TargetGroupingDialog from './TargetGroupingDialog.vue'
 
 const props = defineProps({
   columns: { type: Object, default: null },        // /api/columns 응답
@@ -20,6 +21,12 @@ const yStartDate = ref('') // y target 확보 시점(eds_tkout_time) 기준
 const yEndDate = ref('')
 const xFeatures = ref([])
 const yTargets = ref([])
+// 인라인 grouped target (합산). 정의는 클라 보유(localStorage), 요청에 동봉.
+const LS_KEY = 'pw_target_groups'
+const targetGroups = ref([])
+try { targetGroups.value = JSON.parse(localStorage.getItem(LS_KEY) || '[]') } catch { /* noop */ }
+watch(targetGroups, (v) => { try { localStorage.setItem(LS_KEY, JSON.stringify(v)) } catch { /* noop */ } }, { deep: true })
+const showGroupDialog = ref(false)
 const xSearch = ref('')
 const ySearch = ref('')
 const xSort = ref('name') // name | score(영향도)
@@ -56,8 +63,26 @@ watch(fabStep, () => { xFeatures.value = [] })
 
 // Y target 후보 = 선택 category 종속
 const targetOptions = computed(() => props.columns?.targets_by_category?.[category.value] || [])
-// category 바뀌면 유효하지 않은 yTarget 제거
-watch(category, () => { yTargets.value = yTargets.value.filter((t) => targetOptions.value.includes(t)) })
+// 현재 category에서 유효한(원본이 모두 존재) grouped target만 노출
+const groupNames = computed(() => targetGroups.value.map((g) => g.name))
+const visibleGroups = computed(() => targetGroups.value.filter((g) => g.sources.every((s) => targetOptions.value.includes(s))))
+const checkedRegularTargets = computed(() => yTargets.value.filter((t) => targetOptions.value.includes(t)))
+// category 바뀌면 유효하지 않은 yTarget 제거 (현 category의 원본 target + 유효 그룹은 유지)
+watch(category, () => {
+  yTargets.value = yTargets.value.filter((t) => targetOptions.value.includes(t) || visibleGroups.value.some((g) => g.name === t))
+})
+
+function onCreateGroup(g) {
+  const i = targetGroups.value.findIndex((x) => x.name === g.name)
+  if (i >= 0) targetGroups.value.splice(i, 1, g)
+  else targetGroups.value.push(g)
+  if (!yTargets.value.includes(g.name)) yTargets.value.push(g.name)
+  showGroupDialog.value = false
+}
+function removeGroup(name) {
+  targetGroups.value = targetGroups.value.filter((g) => g.name !== name)
+  yTargets.value = yTargets.value.filter((t) => t !== name)
+}
 
 // 분할(category feature) — 선택 시 값별로 차트·행 분리
 const cfValueOptions = computed(() => props.columns?.category_feature_values?.[categoryFeature.value] || [])
@@ -97,6 +122,9 @@ function onDraw() {
     target_date_range: { start_date: yStartDate.value, end_date: yEndDate.value, time_column: 'eds_tkout_time' },
     fab_step: fabStep.value,
     x_features: [...xFeatures.value], y_targets: [...yTargets.value], bins: 10,
+    y_target_groups: targetGroups.value
+      .filter((g) => yTargets.value.includes(g.name))
+      .map((g) => ({ name: g.name, sources: [...g.sources], agg: g.agg })),
     category_feature: categoryFeature.value
       ? { name: categoryFeature.value, values: [...categoryValues.value], chart_mode: chartMode.value }
       : null,
@@ -124,7 +152,7 @@ function onDraw() {
     <p class="muted">x축·분석 기간 기준: fab_track_out_time</p>
 
     <section>
-      <h3>Y target <small>{{ yTargets.length }}/{{ targetOptions.length }}</small></h3>
+      <h3>Y target <small>{{ yTargets.length }}/{{ targetOptions.length + visibleGroups.length }}</small></h3>
       <div class="grid2">
         <label class="fld">EDS_STEP<select v-model="edsStep"><option v-for="x in columns?.eds_steps" :key="x">{{ x }}</option></select></label>
         <label class="fld">Category<select v-model="category"><option v-for="x in columns?.categories" :key="x">{{ x }}</option></select></label>
@@ -137,11 +165,22 @@ function onDraw() {
       <input class="search" v-model="ySearch" placeholder="검색" />
       <div class="bar"><a @click="allY(true)">전체 선택</a><a @click="allY(false)">해제</a></div>
       <div class="listbox sm">
+        <label v-for="g in visibleGroups" :key="'g:' + g.name" class="item grp" :class="{ on: yTargets.includes(g.name) }" :title="g.sources.join(' + ') + ' (합산)'">
+          <input type="checkbox" :value="g.name" v-model="yTargets" />
+          <span class="gname">{{ g.name }}</span>
+          <span class="gbadge">그룹</span>
+          <a class="grm" title="그룹 삭제" @click.prevent.stop="removeGroup(g.name)">×</a>
+        </label>
         <label v-for="t in fy" :key="t" class="item" :class="{ on: yTargets.includes(t) }">
           <input type="checkbox" :value="t" v-model="yTargets" /><span>{{ t }}</span>
         </label>
-        <p v-if="!fy.length" class="none">결과 없음</p>
+        <p v-if="!fy.length && !visibleGroups.length" class="none">결과 없음</p>
       </div>
+      <button class="groupbtn" :disabled="checkedRegularTargets.length < 2" @click="showGroupDialog = true">
+        선택 {{ checkedRegularTargets.length }}개 합산 그룹 만들기
+      </button>
+      <TargetGroupingDialog v-if="showGroupDialog" :sources="checkedRegularTargets" :existing-names="groupNames"
+        @create="onCreateGroup" @close="showGroupDialog = false" />
     </section>
 
     <section>
@@ -240,6 +279,12 @@ h3 small { font-size: 11px; font-weight: 600; color: var(--accent); background: 
 .sub { font-size: 10px; color: var(--text-2); padding-left: 22px; }
 .tag { font-size: 9px; background: #fde68a; color: #92400e; padding: 0 5px; border-radius: 4px; margin-left: auto; }
 .item input { width: 14px; height: 14px; accent-color: var(--accent); }
+.item.grp { background: var(--accent-weak); }
+.item.grp .gname { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.gbadge { font-size: 9px; font-weight: 700; color: #fff; background: var(--accent); padding: 1px 6px; border-radius: 999px; }
+.grm { color: #d70015; cursor: pointer; font-weight: 700; padding: 0 2px; }
+.groupbtn { padding: 8px; font-size: 12px; font-weight: 600; color: var(--accent); background: #fff; border: 1px dashed var(--accent); border-radius: 9px; cursor: pointer; }
+.groupbtn:disabled { color: var(--text-2); border-color: var(--border); border-style: solid; cursor: not-allowed; opacity: .7; }
 .none { color: #b0b0b5; font-size: 12px; text-align: center; padding: 10px; margin: 0; }
 .draw { margin-top: 6px; padding: 12px; color: #fff; background: linear-gradient(135deg, var(--accent-2), var(--accent)); border: none; border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer; box-shadow: 0 6px 16px rgba(79,70,229,.32); }
 .draw:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; }

@@ -6,7 +6,10 @@ import { cpk as cpkFn, inSpecPct } from '../stats.js'
 const props = defineProps({
   rows: { type: Array, default: () => [] },
   specFor: { type: Function, default: () => ({}) }, // (xFeatureKey, yTarget, cfValue) => { lower, upper }
+  targetGroups: { type: Array, default: () => [] }, // 합산 그룹 정의 [{ name, sources, agg }]
 })
+
+function groupOf(yt) { return props.targetGroups.find((g) => g.name === yt) || null }
 
 // 분할(category feature) 선택 시에만 분할값 컬럼 노출
 const hasCf = computed(() => props.rows.some((r) => r.category_feature_value != null))
@@ -55,7 +58,7 @@ function cpkClass(v) { return v == null ? '' : (v < 1 ? 'bad' : (v < 1.33 ? 'war
         <tr v-for="(r, i) in rows" :key="i">
           <td>{{ r.fab_step }}</td>
           <td :title="r.x_feature"><span class="ms">{{ r.metro_step }}</span> · {{ r.x_feature_display_name }}</td>
-          <td>{{ r.y_target }}</td>
+          <td>{{ r.y_target }}<span v-if="groupOf(r.y_target)" class="grp" :title="groupOf(r.y_target).sources.join(' + ') + ' (합산)'">그룹</span></td>
           <td v-if="hasCf"><span v-if="r.category_feature_value" class="cfv">{{ r.category_feature_value }}</span><span v-else>-</span></td>
           <td>{{ fmt(r.n) }}</td>
           <td>{{ fmt(us(r).lower) }}</td>
@@ -82,6 +85,7 @@ th { background: var(--surface-2); color: var(--text-2); font-weight: 600; posit
 th[title] { cursor: help; text-decoration: underline dotted rgba(0,0,0,.25); text-underline-offset: 3px; }
 .ms { color: var(--text-2); }
 .cfv { font-weight: 600; color: var(--accent); background: var(--accent-weak); padding: 2px 9px; border-radius: 999px; }
+.grp { font-size: 9px; font-weight: 700; color: #fff; background: var(--accent); padding: 1px 6px; border-radius: 999px; margin-left: 6px; cursor: help; }
 tbody tr:last-child td { border-bottom: none; }
 tbody tr:hover { background: #f5f5f7; }
 .ratio { font-weight: 600; color: var(--accent); background: var(--accent-weak); padding: 2px 9px; border-radius: 999px; }
