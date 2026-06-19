@@ -10,6 +10,8 @@ import { PALETTE as C } from '../palette.js'
 const props = defineProps({
   target: { type: Object, default: null },   // 단일: { observed_points, control_limits, ... }
   feature: { type: Object, default: null },  // 단일: { points, control_limits, ... }
+  estimate: { type: Object, default: null }, // 단일: { points:[[iso,val]], fit_summary }
+  showEstimate: { type: Boolean, default: false },
   groups: { type: Array, default: null },    // [{ label, color, target, feature }] — 있으면 겹쳐보기
   yTarget: { type: String, default: '' },
   xFeature: { type: String, default: '' },
@@ -72,9 +74,16 @@ const hasData = computed(() => isMulti.value
   ? props.groups.some((g) => tPts(g.target).length || fPts(g.feature).length)
   : !!(props.target || props.feature))
 
+const estInfo = computed(() => {
+  if (!props.showEstimate || isMulti.value || !props.estimate?.fit_summary || !props.estimate.points?.length) return null
+  const f = props.estimate.fit_summary
+  return { r2: f.r2, n: f.n, count: props.estimate.points.length, weak: f.r2 != null && f.r2 < 0.2 }
+})
+
 function singleOption() {
   const tp = tPts(props.target)
   const fp = fPts(props.feature)
+  const estPts = (props.showEstimate && props.estimate?.points?.length) ? props.estimate.points : []
   const tcl = props.target?.control_limits
   const clMark = (cl, color) => {
     if (!cl) return []
@@ -86,12 +95,14 @@ function singleOption() {
   return {
     ...baseLayout, ...axes(),
     legend: { top: 2, left: 'center', itemWidth: 14, itemHeight: 8, textStyle: { fontSize: 10 },
-      data: [`${props.yTarget}`, '이동평균(target)', `${props.xFeature}`, '이동평균(feature)'] },
+      data: [`${props.yTarget}`, '이동평균(target)', ...(estPts.length ? ['추정 y'] : []), `${props.xFeature}`, '이동평균(feature)'] },
     series: [
       { name: `${props.yTarget}`, type: 'scatter', xAxisIndex: 0, yAxisIndex: 0, data: tp, symbolSize: 4,
         itemStyle: { color: C.tsTarget }, markLine: { symbol: 'none', data: clMark(tcl, C.faint) } },
       { name: '이동평균(target)', type: 'line', xAxisIndex: 0, yAxisIndex: 0, data: movingAverage(tp),
         smooth: true, showSymbol: false, z: 5, lineStyle: { color: C.tsTargetMa, width: 3 }, itemStyle: { color: C.tsTargetMa } },
+      { name: '추정 y', type: 'scatter', xAxisIndex: 0, yAxisIndex: 0, data: estPts, symbol: 'diamond', symbolSize: 7, z: 4,
+        itemStyle: { color: 'transparent', borderColor: C.estimate, borderWidth: 1.5 } },
       { name: `${props.xFeature}`, type: 'scatter', xAxisIndex: 1, yAxisIndex: 1, data: fp, symbolSize: 4,
         itemStyle: { color: C.tsFeature }, markLine: { symbol: 'none', data: featLines() } },
       { name: '이동평균(feature)', type: 'line', xAxisIndex: 1, yAxisIndex: 1, data: movingAverage(fp),
@@ -128,6 +139,10 @@ const option = computed(() => (isMulti.value ? multiOption() : singleOption()))
 <template>
   <div class="ts">
     <span v-if="sampled" class="ds">다운샘플 표시</span>
+    <span v-if="estInfo" class="est" :class="{ weak: estInfo.weak }"
+      :title="`추정 y~x 회귀 · R²=${estInfo.r2 ?? '-'} · 적합 n=${estInfo.n} · 추정 ${estInfo.count}점` + (estInfo.weak ? ' · 적합도 낮음(참고용)' : '')">
+      추정 R² {{ estInfo.r2 == null ? '-' : estInfo.r2.toFixed(2) }}{{ estInfo.weak ? ' ⚠' : '' }}
+    </span>
     <VChart v-if="hasData" class="chart" :option="option" autoresize />
     <p v-else class="empty">시계열 데이터 없음</p>
   </div>
@@ -136,6 +151,8 @@ const option = computed(() => (isMulti.value ? multiOption() : singleOption()))
 <style scoped>
 .ts { position: relative; height: 100%; }
 .ds { position: absolute; top: 2px; left: 56px; z-index: 2; font-size: 10px; font-weight: 600; color: #92400e; background: #fde68a; padding: 1px 7px; border-radius: 999px; }
+.est { position: absolute; top: 2px; right: 40px; z-index: 2; font-size: 10px; font-weight: 600; color: #6b21a8; background: #f3e8ff; padding: 1px 7px; border-radius: 999px; }
+.est.weak { color: #92400e; background: #fde68a; }
 .chart { height: 400px; width: 100%; }
 .empty { height: 400px; display: flex; align-items: center; justify-content: center; color: #aaa; font-size: 13px; }
 </style>
