@@ -87,8 +87,13 @@ watch([fabStep, matching, metroGrade, metroCategory], () => {
     metroGrade: metroGrade.value || null, metroCategory: metroCategory.value || null,
   })
 }, { immediate: true })
-// fab_step 바뀌면 X feature 선택 초기화 (다른 fab의 feature는 무의미)
-watch(fabStep, () => { xFeatures.value = [] })
+// fab_step 바뀌면 X feature 선택 초기화 (다른 fab의 feature는 무의미) — 조용히 지우지 않고 알림
+const xClearedByFab = ref(false)
+watch(fabStep, () => {
+  if (xFeatures.value.length) xClearedByFab.value = true
+  xFeatures.value = []
+})
+watch(xFeatures, (v) => { if (v.length) xClearedByFab.value = false })
 
 // Y target 후보 = 선택 category 종속
 const targetOptions = computed(() => props.columns?.targets_by_category?.[category.value] || [])
@@ -96,9 +101,13 @@ const targetOptions = computed(() => props.columns?.targets_by_category?.[catego
 const groupNames = computed(() => targetGroups.value.map((g) => g.name))
 const visibleGroups = computed(() => targetGroups.value.filter((g) => g.sources.every((s) => targetOptions.value.includes(s))))
 const checkedRegularTargets = computed(() => yTargets.value.filter((t) => targetOptions.value.includes(t)))
-// category 바뀌면 유효하지 않은 yTarget 제거 (현 category의 원본 target + 유효 그룹은 유지)
+// category 바뀌면 유효하지 않은 yTarget 제거 (현 category의 원본 target + 유효 그룹은 유지) — 제거 시 알림
+const yPruned = ref(0)
 watch(category, () => {
+  const before = yTargets.value.length
   yTargets.value = yTargets.value.filter((t) => targetOptions.value.includes(t) || visibleGroups.value.some((g) => g.name === t))
+  const removed = before - yTargets.value.length
+  if (removed > 0) { yPruned.value = removed; setTimeout(() => { yPruned.value = 0 }, 6000) }
 })
 
 function onCreateGroup(g) {
@@ -190,6 +199,7 @@ defineExpose({ drawWithDefaults })
 
     <section>
       <h3>Y target <small>{{ yTargets.length }}/{{ targetOptions.length + visibleGroups.length }}</small></h3>
+      <p v-if="yPruned" class="note">Category 변경 → {{ yPruned }}개 target이 목록에서 빠졌어요</p>
       <div class="grid2">
         <label class="fld">EDS_STEP<select v-model="edsStep"><option v-for="x in columns?.eds_steps" :key="x">{{ x }}</option></select></label>
         <label class="fld">Category<select v-model="category"><option v-for="x in columns?.categories" :key="x">{{ x }}</option></select></label>
@@ -214,15 +224,17 @@ defineExpose({ drawWithDefaults })
         <p v-if="!fy.length && !visibleGroups.length" class="none">결과 없음</p>
       </div>
       <button class="groupbtn" :disabled="checkedRegularTargets.length < 2" @click="showGroupDialog = true"
-        :title="checkedRegularTargets.length < 2 ? 'Y target을 2개 이상 체크하면 활성화 — 선택한 target들을 합산한 가상 target을 만듭니다' : '선택한 target들을 합산한 가상 target 생성'">
+        :title="'선택한 target들을 합산한 가상 target 생성'">
         선택 {{ checkedRegularTargets.length }}개 합산 그룹 만들기
       </button>
+      <p v-if="checkedRegularTargets.length < 2" class="muted gh">Y target 2개 이상 체크하면 합산 그룹을 만들 수 있어요</p>
       <TargetGroupingDialog v-if="showGroupDialog" :sources="checkedRegularTargets" :existing-names="groupNames"
         @create="onCreateGroup" @close="showGroupDialog = false" />
     </section>
 
     <section>
-      <h3>X feature <small>{{ xFeatures.length }}/{{ xFeatureOptions.length }}</small></h3>
+      <h3>X feature <small>{{ xFeatures.length }}/{{ xFeatureOptions.length }}</small><span class="ctx" :title="'아래 목록은 FAB_STEP=' + fabStep + ' 기준'">FAB {{ fabStep }}</span></h3>
+      <p v-if="xClearedByFab" class="note">FAB_STEP을 바꿔서 X feature 선택이 초기화됐어요 — 다시 선택하세요</p>
       <div class="matchrow">
         <label class="tog" :class="{ on: matching }" title="fab_metro_prc 매칭: 선택 FAB_STEP과 연관된 metro item만 표시">
           <input type="checkbox" v-model="matching" />Matching
@@ -286,6 +298,9 @@ defineExpose({ drawWithDefaults })
 select, input[type="date"] { width: 100%; padding: 7px 9px; font-size: 13px; border-radius: 9px; border: 1px solid var(--border); background: #fff; color: var(--text); outline: none; }
 select:focus, input:focus { border-color: var(--accent); box-shadow: var(--ring); }
 .muted { font-size: 10px; color: var(--text-2); margin: -4px 0 0; }
+.note { font-size: 11px; color: #92400e; background: #fef3c7; border: 1px solid #fcd34d; border-radius: 8px; padding: 6px 9px; margin: 2px 0 0; line-height: 1.4; }
+.ctx { margin-left: auto; font-size: 10px; font-weight: 600; color: var(--text-2); background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; letter-spacing: 0; text-transform: none; }
+.gh { margin: 0; }
 section { display: flex; flex-direction: column; gap: 5px; }
 h3 { font-size: 12px; margin: 2px 0 0; color: var(--text-2); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; display: flex; align-items: center; gap: 6px; }
 h3 small { font-size: 11px; font-weight: 600; color: var(--accent); background: var(--accent-weak); border-radius: 999px; padding: 1px 7px; letter-spacing: 0; }

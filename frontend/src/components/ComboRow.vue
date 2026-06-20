@@ -80,7 +80,7 @@ const ck = (v) => (v == null ? '' : (v < 1 ? 'bad' : (v < 1.33 ? 'warn' : 'good'
         <span v-if="thin" class="thin" title="표본 부족 — 신뢰도 낮음">thin</span>
       </span>
       <span class="spec">
-        <span class="lbl">user spec</span>
+        <span class="lbl">user spec<span v-if="multi" class="shared" title="겹쳐보기 모드: 이 spec은 분할값 전체에 공유 적용됩니다">· 전체 값 공유</span></span>
         <label>lower <input type="number" v-model.number="localLo" /></label>
         <label>upper <input type="number" v-model.number="localUp" /></label>
       </span>
@@ -153,6 +153,7 @@ const ck = (v) => (v == null ? '' : (v < 1 ? 'bad' : (v < 1.33 ? 'warn' : 'good'
 .thin { font-size: 10px; font-weight: 700; color: #92400e; background: #fde68a; padding: 1px 7px; border-radius: 999px; text-transform: uppercase; }
 .spec { display: flex; align-items: center; gap: 12px; background: var(--surface-2); padding: 6px 12px; border-radius: 12px; }
 .lbl { font-size: 12px; font-weight: 600; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.03em; }
+.shared { text-transform: none; letter-spacing: 0; font-weight: 600; color: var(--accent); margin-left: 5px; }
 .spec label { font-size: 12px; color: var(--text-2); display: flex; align-items: center; gap: 5px; }
 .spec input {
   width: 70px; padding: 5px 8px; font-size: 13px; border: 1px solid var(--border);

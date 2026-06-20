@@ -137,6 +137,7 @@ const heat = computed(() => {
       <h3 class="pane-title">교호작용 분석</h3>
       <span v-if="result" class="ntot">n = {{ activePoints.length }}<span v-if="result.sampled"> · 다운샘플</span></span>
     </div>
+    <p class="ix-sub">차트 작성에 쓴 X feature·Y target 중 2개를 골라 별도로 비교 — 위 window 차트와 독립이며, 여기서 제외한 outlier는 이 패널에만 적용됩니다.</p>
 
     <div class="controls">
       <label class="f">X축<select v-model="xFeat"><option v-for="o in featOptions" :key="'x' + o.key" :value="o.key">{{ o.label }} · {{ o.grp }}</option></select></label>
@@ -194,6 +195,7 @@ const heat = computed(() => {
 .head { display: flex; align-items: baseline; justify-content: space-between; }
 .pane-title { margin: 0; font-size: 13px; font-weight: 600; color: var(--text-2); text-transform: uppercase; letter-spacing: .04em; }
 .ntot { font-size: 12px; color: var(--text-2); }
+.ix-sub { margin: -4px 0 0; font-size: 11.5px; color: var(--text-2); line-height: 1.5; }
 .controls { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; padding: 4px 0; }
 .f { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--text-2); font-weight: 600; }
 .f select, .f input { padding: 6px 8px; font-size: 12px; border-radius: 8px; border: 1px solid var(--border); background: #fff; color: var(--text); outline: none; }
