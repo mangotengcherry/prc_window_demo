@@ -57,6 +57,33 @@ const groupMas = computed(() => (props.groups || []).map((g) => ({ t: movingAver
 // 선택 구간 밴드 (linked brushing의 시각적 앵커 — brush가 사라져도 남음)
 const selBand = () => props.selection ? { silent: true, itemStyle: { color: 'rgba(79,70,229,0.07)' }, data: [[{ xAxis: props.selection[0] }, { xAxis: props.selection[1] }]] } : undefined
 
+// target 미확보 공백: 마지막 관측 target 시점 ~ 마지막 feature 시점 (lag로 아직 EDS 미확보)
+const maxIso = (arr) => arr.length ? arr.reduce((a, b) => (a > b ? a : b)) : null
+const gapStart = computed(() => maxIso((props.target?.observed_points || []).map((p) => p.time)))
+const gapEnd = computed(() => maxIso((props.feature?.points || []).map((p) => p[0])))
+// 두 패널 x축을 동일 범위로 고정(독립 auto-scale로 인한 시간축 어긋남·공백 클립 방지)
+const xRange = computed(() => {
+  const t = []
+  if (isMulti.value) (props.groups || []).forEach((g) => { fPts(g.feature).forEach((p) => t.push(p[0])); (g.target?.observed_points || []).forEach((p) => t.push(p.time)) })
+  else { fPts(props.feature).forEach((p) => t.push(p[0])); (props.target?.observed_points || []).forEach((p) => t.push(p.time)) }
+  if (!t.length) return [null, null]
+  return [t.reduce((a, b) => (a < b ? a : b)), t.reduce((a, b) => (a > b ? a : b))]
+})
+// target 패널 markArea = 미확보 공백 음영 + 선택 밴드 (둘 다 한 markArea에)
+function targetMarkArea() {
+  const areas = []
+  if (gapStart.value && gapEnd.value && gapEnd.value > gapStart.value) {
+    areas.push([
+      { xAxis: gapStart.value, itemStyle: { color: 'rgba(204,121,167,0.18)' },
+        label: { show: true, position: 'insideTopLeft', distance: 5, fontSize: 9, fontWeight: 600, color: '#9a3a6b',
+          formatter: props.showEstimate ? '추정 구간' : '미확보(추정 대상)' } },
+      { xAxis: gapEnd.value },
+    ])
+  }
+  if (props.selection) areas.push([{ xAxis: props.selection[0], itemStyle: { color: 'rgba(79,70,229,0.07)' } }, { xAxis: props.selection[1] }])
+  return areas.length ? { silent: true, data: areas } : undefined
+}
+
 // 수평선 라벨 — 각 선의 우측 끝, upper=위쪽/lower=아래쪽에 배치(좌측 y축 이름과 겹침 방지)
 function hLabel(label, color, upper) {
   return { formatter: label, fontSize: 9, color, position: 'end', align: 'right',
@@ -90,8 +117,14 @@ const baseLayout = {
   ],
 }
 function axes() {
+  const [r0, r1] = xRange.value
+  const xmin = r0 ? new Date(r0).getTime() : undefined
+  const xmax = r1 ? new Date(r1).getTime() : undefined
   return {
-    xAxis: [{ type: 'time', gridIndex: 0, axisLabel: { show: false } }, { type: 'time', gridIndex: 1 }],
+    xAxis: [
+      { type: 'time', gridIndex: 0, min: xmin, max: xmax, axisLabel: { show: false } },
+      { type: 'time', gridIndex: 1, min: xmin, max: xmax, axisLabel: { formatter: '{MM}-{dd}', rotate: 28, fontSize: 9, hideOverlap: true } },
+    ],
     yAxis: [
       { type: 'value', gridIndex: 0, name: props.yTarget, scale: true, nameTextStyle: { fontSize: 10 } },
       { type: 'value', gridIndex: 1, name: props.xFeature, scale: true, nameTextStyle: { fontSize: 10 } },
@@ -128,7 +161,7 @@ function singleOption() {
       data: ['target', 'target 추세', ...(estPts.length ? ['추정 y'] : []), 'feature', 'feature 추세'] },
     series: [
       { name: 'target', type: 'scatter', xAxisIndex: 0, yAxisIndex: 0, data: tp, symbolSize: 4,
-        itemStyle: { color: C.tsTarget }, markLine: { symbol: 'none', data: clMark(tcl, C.faint) }, markArea: selBand() },
+        itemStyle: { color: C.tsTarget }, markLine: { symbol: 'none', data: clMark(tcl, C.faint) }, markArea: targetMarkArea() },
       { name: 'target 추세', type: 'line', xAxisIndex: 0, yAxisIndex: 0, data: tMaSingle.value,
         smooth: true, showSymbol: false, z: 5, lineStyle: { color: C.tsTargetMa, width: 3 }, itemStyle: { color: C.tsTargetMa } },
       { name: '추정 y', type: 'scatter', xAxisIndex: 0, yAxisIndex: 0, data: estPts, symbol: 'diamond', symbolSize: 7, z: 4,
