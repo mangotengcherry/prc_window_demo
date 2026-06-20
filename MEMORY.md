@@ -91,7 +91,12 @@ cd frontend && npm install && npm run dev   # http://localhost:5173
 
 `ui_enhancement_request.md`(회사 현실형 요구 + 리뷰)를 M0→M2 단계로 구현 완료. 핵심 변화:
 
-### 데이터 모델 진화 (data.py)
+### 데이터 교체 구조 (data_source.py ↔ data.py) — 실데이터 적용 시 ★
+- **`data_source.py`(교체 지점)**: provider 함수 8개로 원천만 제공(fact_table·feature_catalog·dc_spec·targets_by_category·target_units·category_feature_names·eds_steps·target_lag_days). 팀원은 보통 이 파일만 회사 DB/CSV로 바꾼다.
+- **`data.py`(계약/파생, 보통 무수정)**: data_source에서 LINE_IDS/PRODUCTS/FAB_STEPS/CATEGORIES/ALL_TARGETS/CATEGORY_FEATURES(값은 데이터 파생) 등 자동 계산. 공개 API 동일 → analytics/main 무수정.
+- **`validate_data.py`**: 교체 후 `python validate_data.py`로 스키마·표본·분석 smoke 검증. **`backend/DATA_GUIDE.md`**: 스키마·CSV/DB 예시·트러블슈팅.
+
+### 데이터 모델 진화 (data_source.py 데모 생성기)
 - 초기 ETCH feature/target → **계약 동형 mock**으로 교체: `fab_metro_prc` 매칭 테이블(파이프키 `data_type|fab_step|metro_step|metro_item|subitem`), 카테고리(BIN/MSR/AWACS)별 EDS target, line/product/category/eds_step 필터.
 - **시간 2축 분리**: `fab_track_out_time`(x축·분석 기준) vs `eds_tkout_time`(y 확보 시점). lag ≈ `TARGET_LAG_DAYS=60`일 → 최근 ~60일 wafer는 미관측(observed=False, target NaN). `NOW="2026-06-19"`.
 - category feature(PPID/ECO/EQP_MODEL/EQP/EQP_CH)는 wafer 단위 속성(분할용). x feature는 numeric만(categorical 미지원).
