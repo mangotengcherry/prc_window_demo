@@ -53,7 +53,8 @@ main.py          ← FastAPI 라우팅 — 수정 불필요
 
 | 컬럼 | 형식 | 필수 | 의미 |
 |---|---|:--:|---|
-| `wafer_id` | str | ✅ | wafer 식별자 |
+| `wafer_id` | str | ✅ | wafer 식별자 (scatter 점 hover 툴팁·raw CSV에 표시) |
+| `root_lot_id` | str | ✅ | root lot 식별자 (wafer 묶음. 툴팁·raw CSV에 표시) |
 | `line_id` | str | ✅ | 라인 (필터 차원 → 목록 자동 파생) |
 | `product` | str | ✅ | 제품 (필터 차원) |
 | `fab_step` | str | ✅ | 공정 step (필터 차원) |

@@ -66,7 +66,7 @@ def validate_source() -> list:
     fact = load_dataframe()
     cat = fab_metro_prc()
 
-    required_cols = ["wafer_id", "line_id", "product", "fab_step",
+    required_cols = ["wafer_id", "root_lot_id", "line_id", "product", "fab_step",
                      "fab_track_out_time", "eds_tkout_time", "observed"]
     for c in required_cols:
         if c not in fact.columns:

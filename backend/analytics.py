@@ -212,16 +212,24 @@ def _drift(points) -> Optional[dict]:
     return {"shift": shift, "direction": "up" if shift >= 0 else "down", "flagged": bool(abs(shift) >= 1.0)}
 
 
+def _id_pairs(frame: pd.DataFrame):
+    """[[root_lot_id, wafer_id], ...] — points/scatter와 동일 순서로 식별자 동행(툴팁용)."""
+    n = len(frame)
+    wid = frame["wafer_id"].astype(str).tolist() if "wafer_id" in frame.columns else [""] * n
+    rl = frame["root_lot_id"].astype(str).tolist() if "root_lot_id" in frame.columns else [""] * n
+    return [[r, w] for w, r in zip(wid, rl)]
+
+
 def _fit_estimate(obs_rows: pd.DataFrame, sub: pd.DataFrame, xf: str, yt: str):
     """관측 wafer로 y~x 선형회귀 적합 → 미관측 wafer의 x로 y 추정 (사용자 선택: X–Y 회귀)."""
     o = obs_rows[obs_rows[xf].notna()]
     if len(o) < 5:
-        return [], None
+        return [], None, []
     x = o[xf].to_numpy(dtype=float)
     y = o[yt].to_numpy(dtype=float)
     sxx = float(((x - x.mean()) ** 2).sum())
     if sxx == 0:
-        return [], None
+        return [], None, []
     slope = float(((x - x.mean()) * (y - y.mean())).sum() / sxx)
     intercept = float(y.mean() - slope * x.mean())
     yhat = slope * x + intercept
@@ -233,7 +241,7 @@ def _fit_estimate(obs_rows: pd.DataFrame, sub: pd.DataFrame, xf: str, yt: str):
     pts = [[t.isoformat(), round(float(slope * xx + intercept), 4)] for t, xx in zip(un["fab_track_out_time"], un[xf])]
     fit = {"slope": round(slope, 6), "intercept": round(intercept, 4),
            "r2": round(float(r2), 4) if r2 is not None else None, "n": int(len(o))}
-    return pts, fit
+    return pts, fit, _id_pairs(un)
 
 
 def compute_timeseries(req) -> dict:
@@ -247,10 +255,12 @@ def compute_timeseries(req) -> dict:
     for cf_name, cf_val, sub in splits:
         for yt in req.y_targets:
             obs = _apply_target_date(sub[sub["observed"] & sub[yt].notna()], req.target_date_range)
+            o_ids = _id_pairs(obs)
             observed_points = [{
                 "time": t.isoformat(), "value": round(float(v), 4),
                 "value_status": "observed", "observed_time": e.isoformat(),
-            } for t, v, e in zip(obs["fab_track_out_time"], obs[yt], obs["eds_tkout_time"])]
+                "rlot": rid[0], "wid": rid[1],
+            } for t, v, e, rid in zip(obs["fab_track_out_time"], obs[yt], obs["eds_tkout_time"], o_ids)]
             targets.append({
                 "name": yt, "display_name": yt, "unit": D.TARGET_UNIT.get(yt, ""),
                 "category_feature_value": cf_val,
@@ -264,7 +274,7 @@ def compute_timeseries(req) -> dict:
             for xf in req.x_features:
                 if xf not in sub.columns:
                     continue
-                pts, fit = _fit_estimate(obs, sub, xf, yt)
+                pts, fit, pt_ids = _fit_estimate(obs, sub, xf, yt)
                 if pts:
                     # lag 기반 OOS 예측: 추정 y가 target 관리한계(±3σ)를 벗어나는 미확보 wafer 수
                     # + 미확보 batch 추정 평균이 관측 평균 대비 몇 σ 이동했는지(잠복 drift 조기경보)
@@ -279,7 +289,7 @@ def compute_timeseries(req) -> dict:
                                     "shift": shift, "mean_pred": round(mean_pred, 2)}
                     estimates.append({"x_feature": xf, "y_target": yt,
                                       "category_feature_value": cf_val, "points": pts,
-                                      "fit_summary": fit, "forecast": forecast})
+                                      "point_ids": pt_ids, "fit_summary": fit, "forecast": forecast})
         for xf in req.x_features:
             if xf not in sub.columns:
                 continue
@@ -288,6 +298,7 @@ def compute_timeseries(req) -> dict:
             features.append({
                 "name": xf, "display_name": _meta_for(xf).get("display_name", xf),
                 "unit": units.get(xf, ""), "category_feature_value": cf_val, "points": points,
+                "point_ids": _id_pairs(fs),
                 "avg": round(float(fs[xf].mean()), 4) if len(fs) else None,
                 "control_limits": _control_limits(fs[xf]) if len(fs) else None,
                 "drift": _drift(points),
@@ -412,9 +423,30 @@ def compute_interaction(req) -> dict:
 
     sampled = n_total > SCATTER_CAP
     ss = s.sample(SCATTER_CAP, random_state=0) if sampled else s
+    s_ids = _id_pairs(ss)
     scatter = [{"x": round(float(x), 4), "y": round(float(y), 4),
-                "value": None if use_count else round(float(v), 4)}
-               for x, y, v in zip(ss[xf], ss[yf], (ss[xf] if use_count else ss[vf]))]
+                "value": None if use_count else round(float(v), 4),
+                "rlot": rid[0], "wid": rid[1], "t": tt.isoformat()}
+               for x, y, v, rid, tt in zip(ss[xf], ss[yf], (ss[xf] if use_count else ss[vf]),
+                                           s_ids, ss["fab_track_out_time"])]
 
     return {"x_feature": xf, "y_feature": yf, "value_field": vf,
             "sampled": sampled, "n_total": n_total, "scatter_points": scatter}
+
+
+# ---------------- /api/raw (원시데이터 CSV) ----------------
+def raw_frame(req) -> pd.DataFrame:
+    """현재 분석 조건(라인·제품·fab_step·기간·선택영역)의 wafer 단위 원시행.
+    식별자 + 분할 + 선택한 x_feature/y_target 컬럼만. 관측·미관측 모두 포함."""
+    df = _with_target_groups(D.load_dataframe(), getattr(req, "y_target_groups", None))
+    sub = _filter_rows(df, line_id=req.line_id, product=req.product,
+                       fab_step=req.fab_step, date_range=req.date_range)
+    sub = _apply_selection(sub, getattr(req, "selection", None))  # brush 선택 구간 반영
+    id_cols = [c for c in ["root_lot_id", "wafer_id", "line_id", "product", "fab_step",
+                           "fab_track_out_time", "eds_tkout_time", "observed"] if c in sub.columns]
+    cat_cols = [c for c in D.CATEGORY_FEATURES if c in sub.columns]
+    feat_cols = [x for x in req.x_features if x in sub.columns]
+    tgt_cols = [y for y in req.y_targets if y in sub.columns]
+    cols = id_cols + cat_cols + feat_cols + tgt_cols
+    out = sub[cols]
+    return out.sort_values("fab_track_out_time") if "fab_track_out_time" in out.columns else out

@@ -1,8 +1,10 @@
 """FastAPI 앱 진입점 (M0). 라우팅 + CORS. 계산은 analytics.py 에 위임."""
+import io
 from typing import Optional
 
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 
 import analytics
 import data as D
@@ -94,3 +96,15 @@ def post_interaction(req: InteractionRequest):
 @app.post("/api/drivers", response_model=DriversResponse)
 def post_drivers(req: DriversRequest):
     return analytics.compute_drivers(req)
+
+
+@app.post("/api/raw")
+def post_raw(req: TableRequest):
+    """현재 분석 조건의 wafer 원시데이터 CSV (식별자 + 선택 feature/target)."""
+    df = analytics.raw_frame(req)
+    buf = io.StringIO()
+    buf.write("﻿")  # Excel이 UTF-8(한글)로 인식하도록 BOM
+    df.to_csv(buf, index=False)
+    fname = f"raw_{req.fab_step}_{req.date_range.start_date}_{req.date_range.end_date}.csv"
+    return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv; charset=utf-8",
+                             headers={"Content-Disposition": f'attachment; filename="{fname}"'})

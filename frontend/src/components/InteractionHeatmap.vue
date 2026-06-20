@@ -1,7 +1,7 @@
 <script setup>
 // 교호작용 heatmap: x_bin×y_bin 격자, cell 색 = value(평균/중앙값). 저카운트 셀 디엠퍼시스.
 // cells는 부모(InteractionPanel)가 scatter 점(제외 반영)으로 즉시 계산해 내려줌.
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import VChart from 'vue-echarts'
 import '../echarts.js'
 import { HEAT_RAMP } from '../palette.js'
@@ -14,7 +14,23 @@ const props = defineProps({
   yLabel: { type: String, default: 'y' },
   valueLabel: { type: String, default: 'value' },
   minCount: { type: Number, default: 10 },
+  highlight: { type: Object, default: null },  // { x_bin, y_bin } — 순위 테이블 hover와 연동
 })
+const emit = defineEmits(['cellhover'])
+
+// 셀(x_bin,y_bin) → data 배열 인덱스. 테이블 hover 시 해당 셀을 강조(dispatchAction).
+const chart = ref(null)
+const cellIndex = computed(() => { const m = new Map(); props.cells.forEach((c, i) => m.set(c.x_bin + ',' + c.y_bin, i)); return m })
+watch(() => props.highlight, (h) => {
+  const c = chart.value
+  if (!c) return
+  c.dispatchAction({ type: 'downplay', seriesIndex: 0 })
+  if (!h) return
+  const di = cellIndex.value.get(h.x_bin + ',' + h.y_bin)
+  if (di != null) c.dispatchAction({ type: 'highlight', seriesIndex: 0, dataIndex: di })
+})
+const onOver = (p) => { if (p.data?.value) emit('cellhover', { x_bin: p.data.value[0], y_bin: p.data.value[1] }) }
+const onOut = () => emit('cellhover', null)
 
 const xLabels = computed(() => { const a = Array(props.xBins).fill(''); props.cells.forEach((c) => { a[c.x_bin] = c.x_bin_label }); return a })
 const yLabels = computed(() => { const a = Array(props.yBins).fill(''); props.cells.forEach((c) => { a[c.y_bin] = c.y_bin_label }); return a })
@@ -49,14 +65,15 @@ const option = computed(() => {
       { type: 'slider', xAxisIndex: 0, bottom: 2, height: 12, brushSelect: false, handleSize: 20, moveHandleSize: 7, showDetail: false, labelFormatter: '' },
       { type: 'slider', yAxisIndex: 0, right: 6, width: 12, brushSelect: false, handleSize: 20, moveHandleSize: 7, showDetail: false, labelFormatter: '' },
     ],
-    series: [{ type: 'heatmap', data, label: { show: false }, emphasis: { itemStyle: { borderColor: '#111', borderWidth: 1 } } }],
+    series: [{ type: 'heatmap', data, label: { show: false },
+      emphasis: { itemStyle: { borderColor: '#111827', borderWidth: 2.5, shadowBlur: 4, shadowColor: 'rgba(0,0,0,0.4)' } } }],
   }
 })
 </script>
 
 <template>
   <div class="wrap">
-    <VChart v-if="cells.length" class="chart" :option="option" autoresize />
+    <VChart v-if="cells.length" ref="chart" class="chart" :option="option" autoresize @mouseover="onOver" @globalout="onOut" />
     <p v-else class="empty">데이터 없음</p>
   </div>
 </template>

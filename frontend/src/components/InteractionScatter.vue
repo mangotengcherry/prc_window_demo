@@ -21,17 +21,26 @@ const emit = defineEmits(['focus'])
 const inRegion = (p) => !props.focus ||
   (p.x >= props.focus.x[0] && p.x <= props.focus.x[1] && p.y >= props.focus.y[0] && p.y <= props.focus.y[1])
 const hasValue = computed(() => props.points.some((p) => p.value != null))
-const inData = computed(() => props.points.filter(inRegion).map((p) => [p.x, p.y, p.value, p.i]))
-const outData = computed(() => props.focus ? props.points.filter((p) => !inRegion(p)).map((p) => [p.x, p.y, p.value, p.i]) : [])
+// 점 = wafer 1매 → 식별자(root_lot_id·wafer_id·tkout) 동행 객체로(visualMap은 value[2] 사용)
+const toItem = (p) => ({ value: [p.x, p.y, p.value, p.i], wid: p.wid, rlot: p.rlot, t: p.t })
+const inData = computed(() => props.points.filter(inRegion).map(toItem))
+const outData = computed(() => props.focus ? props.points.filter((p) => !inRegion(p)).map(toItem) : [])
 const allVals = computed(() => props.points.map((p) => p.value).filter((v) => v != null))
 function minmax(a) { let lo = Infinity, hi = -Infinity; for (const v of a) { if (v < lo) lo = v; if (v > hi) hi = v } return a.length ? [lo, hi] : [0, 1] }
 
 const option = computed(() => {
   const [vmin, vmax] = minmax(allVals.value)
   return {
-    tooltip: { trigger: 'item', formatter: (p) =>
-      `${props.xLabel}: ${p.data[0]}<br/>${props.yLabel}: ${p.data[1]}` +
-      (p.data[2] == null ? '' : `<br/>${props.valueLabel}: ${p.data[2]}`) },
+    tooltip: { trigger: 'item', confine: true, formatter: (p) => {
+      const d = p.data, v = d.value
+      let s = d.wid ? `<b>${d.wid}</b>` : ''
+      if (d.rlot) s += ` <span style="color:#8a8a8a">· ${d.rlot}</span>`
+      if (s) s += '<br/>'
+      s += `${props.xLabel}: ${v[0]}<br/>${props.yLabel}: ${v[1]}`
+      if (v[2] != null && props.valueLabel !== props.yLabel && props.valueLabel !== props.xLabel) s += `<br/>${props.valueLabel}: ${v[2]}`
+      if (d.t) s += `<br/><span style="color:#8a8a8a">tkout</span> ${String(d.t).slice(0, 16).replace('T', ' ')}`
+      return s
+    } },
     toolbox: { show: true, right: 8, top: -2, itemSize: 13,
       feature: { brush: { type: ['rect', 'clear'], title: { rect: '영역 선택(재계산)', clear: '전체 보기' } } } },
     brush: { xAxisIndex: 0, yAxisIndex: 0, brushType: 'rect', brushMode: 'single',

@@ -121,7 +121,7 @@ def fact_table() -> pd.DataFrame:
     그 행의 fab_step에 해당하는 numeric feature 컬럼만 값, 나머지는 NaN.
     target/category_feature는 wafer 단위로 모든 행에 반복. target은 observed일 때만 값.
 
-    필수 컬럼: wafer_id, line_id, product, fab_step, fab_track_out_time,
+    필수 컬럼: wafer_id, root_lot_id, line_id, product, fab_step, fab_track_out_time,
     eds_tkout_time, observed, + feature 컬럼(feature_key명) + target 컬럼 + 분할 컬럼.
     """
     rng = np.random.default_rng(42)
@@ -143,6 +143,7 @@ def fact_table() -> pd.DataFrame:
     rows = []
     for w in range(_N_WAFERS):
         wid = f"W{w:05d}"
+        rlot = f"LOT{w // 25:04d}"  # wafer 25매 = 1 root lot (실데이터에선 원천 lot id 사용)
         line = rng.choice(lines)
         product = rng.choice(products)
         wafer_start = _NOW - pd.Timedelta(days=int(rng.integers(5, 210)))
@@ -171,7 +172,7 @@ def fact_table() -> pd.DataFrame:
             eds_tko = wafer_start + pd.Timedelta(days=lag) + pd.Timedelta(hours=6 * si)
             observed = eds_tko <= _NOW  # 최근 ~lag일은 미확보(target NaN) → 추정 대상
             row = {
-                "wafer_id": wid, "line_id": line, "product": product, "fab_step": fab,
+                "wafer_id": wid, "root_lot_id": rlot, "line_id": line, "product": product, "fab_step": fab,
                 "fab_track_out_time": fab_tko, "eds_tkout_time": eds_tko, "observed": bool(observed),
             }
             row.update(cat_feat_vals)
