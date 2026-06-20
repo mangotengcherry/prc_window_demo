@@ -170,7 +170,6 @@ def compute_binned(req) -> dict:
                 if len(combos) >= req_max_combos():
                     truncated = True
                     break
-                bins = _bin_one(s, xf, yt, req.bins)
                 combos.append({
                     "x_feature": xf,
                     "x_feature_display_name": meta.get("display_name", xf),
@@ -179,8 +178,7 @@ def compute_binned(req) -> dict:
                     "eds_step": req.eds_step,
                     "category_feature_name": cf_name,
                     "category_feature_value": cf_val,
-                    "bins": bins,
-                    "recommended_window": _recommend_window(bins),
+                    "bins": _bin_one(s, xf, yt, req.bins),
                 })
     return {"fab_step": req.fab_step, "combos": combos, "truncated": truncated}
 
@@ -190,29 +188,6 @@ MIN_N = 10  # thin 기준 표본수 (columns.min_n과 동일 소스). 추천 win
 
 def req_max_combos() -> int:
     return 24  # 현실성 리뷰 R4: 요청당 combo 하드 캡
-
-
-def _recommend_window(bins, min_span: int = 3):
-    """y가 가장 안정(분산 최소)한 공정창 추천. 표본 충분(n≥MIN_N)한 인접 bin 구간 중
-    bin별 y_avg의 표준편차가 가장 작은 폭 min_span 이상 구간. 동률은 더 넓은 구간 우선."""
-    ok = [b["wafer_count"] >= MIN_N and b["y_avg"] is not None for b in bins]
-    best = None  # (std, width, i, j)
-    for i in range(len(bins)):
-        if not ok[i]:
-            continue
-        for j in range(i + min_span - 1, len(bins)):
-            if not all(ok[i:j + 1]):
-                break
-            ys = [bins[k]["y_avg"] for k in range(i, j + 1)]
-            std = float(np.std(ys, ddof=1)) if len(ys) > 1 else 0.0
-            width = j - i + 1
-            cand = (round(std, 4), -width, i, j)
-            if best is None or cand < best:
-                best = cand
-    if best is None:
-        return None
-    std, negw, i, j = best
-    return {"lower": bins[i]["bin_left"], "upper": bins[j]["bin_right"], "score": std}
 
 
 # ---------------- /api/timeseries ----------------
