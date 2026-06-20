@@ -1,19 +1,19 @@
 <script setup>
-// 교호작용 분석 패널: 차트 작성에 쓰인 X features/Y target 중 2개를 x/y축으로,
-// value_field를 집계(average/median)해 scatter + heatmap + rank table로 분석.
+// 교호작용 분석: 차트 작성에 쓰인 X features/Y target 중 2개를 x/y축으로,
+// value_field를 집계해 scatter + heatmap + rank로 분석.
+// scatter 점만 서버에서 받고, binning/집계/제외(outlier)는 프론트에서 즉시 계산(서버 재요청 없이 인터랙션).
 import { ref, computed, watch } from 'vue'
 import InteractionScatter from './InteractionScatter.vue'
 import InteractionHeatmap from './InteractionHeatmap.vue'
 import { fetchInteraction } from '../api/client.js'
 
 const props = defineProps({
-  cond: { type: Object, default: null },         // 마지막 차트 작성 조건(lastCond)
-  labels: { type: Object, default: () => ({}) }, // x_feature key → 표시명
+  cond: { type: Object, default: null },
+  labels: { type: Object, default: () => ({}) },
   minN: { type: Number, default: 10 },
 })
 
 function labelOf(k) { return k === '__count__' ? 'wafer 수' : (props.labels[k] || k) }
-
 const featOptions = computed(() => {
   const c = props.cond; if (!c) return []
   return [
@@ -29,31 +29,30 @@ const valueField = ref('')
 const aggregation = ref('average')
 const xBins = ref(10)
 const yBins = ref(10)
-const xRange = ref(['', ''])
-const yRange = ref(['', ''])
+const excluded = ref(new Set())  // 제외된 점 index
 
 const result = ref(null)
 const loading = ref(false)
 const error = ref('')
-
-function validRange(r) {
-  const a = parseFloat(r[0]), b = parseFloat(r[1])
-  return (isFinite(a) && isFinite(b) && b > a) ? [a, b] : null
-}
+let lastSig = ''
 
 async function run() {
   const c = props.cond
   if (!c || !xFeat.value || !yFeat.value || !valueField.value) return
+  const sig = [c.line_id, c.product, c.category, c.eds_step, c.fab_step,
+    c.date_range?.start_date, c.date_range?.end_date, c.target_date_range?.start_date, c.target_date_range?.end_date,
+    xFeat.value, yFeat.value, valueField.value].join('|')
+  if (sig === lastSig) return  // 중복요청 방지(cond·축 동시 변경 등)
+  lastSig = sig
   loading.value = true; error.value = ''
   try {
     result.value = await fetchInteraction({
       line_id: c.line_id, product: c.product, category: c.category, eds_step: c.eds_step,
       fab_step: c.fab_step, date_range: c.date_range, target_date_range: c.target_date_range,
       x_feature: xFeat.value, y_feature: yFeat.value, value_field: valueField.value,
-      aggregation: aggregation.value, x_bins: xBins.value, y_bins: yBins.value,
-      x_range: validRange(xRange.value), y_range: validRange(yRange.value),
       y_target_groups: c.y_target_groups || [],
     })
+    excluded.value = new Set()  // 새 데이터 → 제외 초기화
   } catch (e) {
     error.value = e.message || '교호작용 분석 실패'
   } finally {
@@ -61,37 +60,76 @@ async function run() {
   }
 }
 
-// 새 차트 작성(cond 변경) → 기본 축/값 재설정 후 1회 실행
 watch(() => props.cond, (c) => {
   if (!c) { result.value = null; return }
   xFeat.value = c.x_features?.[0] || c.y_targets?.[0] || ''
   yFeat.value = c.x_features?.[1] || c.y_targets?.[0] || c.x_features?.[0] || ''
   valueField.value = c.y_targets?.[0] || '__count__'
-  xRange.value = ['', '']; yRange.value = ['', '']
   run()
 }, { immediate: true })
+watch([xFeat, yFeat, valueField], run)
 
-// 컨트롤 변경 → 즉시 반영
-watch([xFeat, yFeat, valueField, aggregation, xBins, yBins], run)
+// ---- 점 + 제외 ----
+const points = computed(() => (result.value?.scatter_points || []).map((p, i) => ({ ...p, i })))
+const activePoints = computed(() => points.value.filter((p) => !excluded.value.has(p.i)))
+const excludedCount = computed(() => excluded.value.size)
+function onToggleExclude(i) {
+  const s = new Set(excluded.value)
+  s.has(i) ? s.delete(i) : s.add(i)
+  excluded.value = s
+}
+function onExcludeRegion(idxs) {
+  const s = new Set(excluded.value)
+  idxs.forEach((i) => s.add(i))
+  excluded.value = s
+}
+function clearExcluded() { excluded.value = new Set() }
+
+// ---- heatmap + rank (프론트 계산, 제외 반영) ----
+function median(a) { const s = [...a].sort((x, y) => x - y); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2 }
+function edges(lo, hi, n) { if (hi <= lo) hi = lo + 1e-9; const out = []; for (let i = 0; i <= n; i++) out.push(lo + (hi - lo) * i / n); return out }
+function binOf(v, lo, hi, n) { if (v < lo || v > hi) return -1; return Math.max(0, Math.min(n - 1, Math.floor((v - lo) / ((hi - lo) || 1e-9) * n))) }
+const fmt = (v) => Number(v.toPrecision(4))
+
+const heat = computed(() => {
+  const pts = activePoints.value
+  if (!pts.length) return { cells: [], rank: [] }
+  const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y)
+  const xlo = Math.min(...xs), xhi = Math.max(...xs), ylo = Math.min(...ys), yhi = Math.max(...ys)
+  const xE = edges(xlo, xhi, xBins.value), yE = edges(ylo, yhi, yBins.value)
+  const isCount = pts[0].value == null
+  const buckets = new Map()
+  for (const p of pts) {
+    const xi = binOf(p.x, xlo, xhi, xBins.value), yi = binOf(p.y, ylo, yhi, yBins.value)
+    if (xi < 0 || yi < 0) continue
+    const k = xi + ',' + yi
+    if (!buckets.has(k)) buckets.set(k, [])
+    buckets.get(k).push(isCount ? 1 : p.value)
+  }
+  const cells = []
+  for (const [k, vs] of buckets) {
+    const [xi, yi] = k.split(',').map(Number)
+    const v = isCount ? vs.length : (aggregation.value === 'median' ? median(vs) : vs.reduce((a, b) => a + b, 0) / vs.length)
+    cells.push({ x_bin: xi, y_bin: yi, x_bin_label: `${fmt(xE[xi])} – ${fmt(xE[xi + 1])}`,
+      y_bin_label: `${fmt(yE[yi])} – ${fmt(yE[yi + 1])}`, value: Math.round(v * 1e4) / 1e4, count: vs.length })
+  }
+  const rank = [...cells].sort((a, b) => b.value - a.value).slice(0, 50)
+    .map((c, i) => ({ rank: i + 1, x_bin_label: c.x_bin_label, y_bin_label: c.y_bin_label, aggregation: c.value, count: c.count }))
+  return { cells, rank }
+})
 </script>
 
 <template>
   <section class="ix">
     <div class="head">
       <h3 class="pane-title">교호작용 분석</h3>
-      <span v-if="result" class="ntot">n = {{ result.n_total }}<span v-if="result.sampled"> · scatter 다운샘플</span></span>
+      <span v-if="result" class="ntot">n = {{ activePoints.length }}<span v-if="result.sampled"> · 다운샘플</span></span>
     </div>
 
     <div class="controls">
-      <label class="f">X축
-        <select v-model="xFeat"><option v-for="o in featOptions" :key="'x' + o.key" :value="o.key">{{ o.label }} · {{ o.grp }}</option></select>
-      </label>
-      <label class="f">Y축
-        <select v-model="yFeat"><option v-for="o in featOptions" :key="'y' + o.key" :value="o.key">{{ o.label }} · {{ o.grp }}</option></select>
-      </label>
-      <label class="f">Value
-        <select v-model="valueField"><option v-for="o in valueOptions" :key="'v' + o.key" :value="o.key">{{ o.label }}</option></select>
-      </label>
+      <label class="f">X축<select v-model="xFeat"><option v-for="o in featOptions" :key="'x' + o.key" :value="o.key">{{ o.label }} · {{ o.grp }}</option></select></label>
+      <label class="f">Y축<select v-model="yFeat"><option v-for="o in featOptions" :key="'y' + o.key" :value="o.key">{{ o.label }} · {{ o.grp }}</option></select></label>
+      <label class="f">Value<select v-model="valueField"><option v-for="o in valueOptions" :key="'v' + o.key" :value="o.key">{{ o.label }}</option></select></label>
       <div class="f">집계
         <div class="seg">
           <button :class="{ on: aggregation === 'average' }" @click="aggregation = 'average'">평균</button>
@@ -100,38 +138,34 @@ watch([xFeat, yFeat, valueField, aggregation, xBins, yBins], run)
       </div>
       <label class="f sm">X bins<input type="number" min="2" max="40" v-model.number="xBins" /></label>
       <label class="f sm">Y bins<input type="number" min="2" max="40" v-model.number="yBins" /></label>
-      <div class="f rng">X range
-        <span><input type="number" v-model="xRange[0]" placeholder="min" @change="run" /><input type="number" v-model="xRange[1]" placeholder="max" @change="run" /></span>
-      </div>
-      <div class="f rng">Y range
-        <span><input type="number" v-model="yRange[0]" placeholder="min" @change="run" /><input type="number" v-model="yRange[1]" placeholder="max" @change="run" /></span>
-      </div>
+      <div v-if="excludedCount" class="excl">제외 {{ excludedCount }}개<button @click="clearExcluded">초기화</button></div>
     </div>
 
     <p v-if="error" class="banner err">⚠ {{ error }}</p>
     <p v-else-if="loading" class="banner">분석 중…</p>
-    <p v-else-if="result && !result.n_total" class="banner">선택한 조합에 데이터가 없습니다.</p>
+    <p v-else-if="result && !points.length" class="banner">선택한 조합에 데이터가 없습니다.</p>
 
-    <div v-if="result && result.n_total" class="charts">
+    <div v-if="points.length" class="charts">
       <div class="cell">
-        <div class="cap">Scatter <small>{{ labelOf(yFeat) }} vs {{ labelOf(xFeat) }}</small></div>
-        <InteractionScatter :points="result.scatter_points" :x-label="labelOf(xFeat)" :y-label="labelOf(yFeat)"
-          :value-label="labelOf(valueField)" :sampled="result.sampled" />
+        <div class="cap">Scatter <small>{{ labelOf(yFeat) }} vs {{ labelOf(xFeat) }} · 점 클릭/영역 brush로 outlier 제외</small></div>
+        <InteractionScatter :points="points" :excluded="excluded" :x-label="labelOf(xFeat)" :y-label="labelOf(yFeat)"
+          :value-label="labelOf(valueField)" :sampled="result.sampled"
+          @toggle-exclude="onToggleExclude" @exclude-region="onExcludeRegion" />
       </div>
       <div class="cell">
-        <div class="cap">Heatmap <small>{{ labelOf(valueField) }} ({{ aggregation === 'median' ? '중앙값' : '평균' }})</small></div>
-        <InteractionHeatmap :cells="result.heatmap_cells" :x-bins="xBins" :y-bins="yBins"
+        <div class="cap">Heatmap <small>{{ labelOf(valueField) }} ({{ aggregation === 'median' ? '중앙값' : '평균' }}){{ excludedCount ? ' · 제외 반영' : '' }}</small></div>
+        <InteractionHeatmap :cells="heat.cells" :x-bins="xBins" :y-bins="yBins"
           :x-label="labelOf(xFeat)" :y-label="labelOf(yFeat)" :value-label="labelOf(valueField)" :min-count="minN" />
       </div>
     </div>
 
-    <div v-if="result && result.rank_rows.length" class="rank">
+    <div v-if="heat.rank.length" class="rank">
       <div class="cap">순위 ({{ labelOf(valueField) }} {{ aggregation === 'median' ? '중앙값' : '평균' }} 내림차순)</div>
       <div class="rank-wrap">
         <table>
           <thead><tr><th>#</th><th>{{ labelOf(xFeat) }}</th><th>{{ labelOf(yFeat) }}</th><th>집계값</th><th>n</th></tr></thead>
           <tbody>
-            <tr v-for="r in result.rank_rows" :key="r.rank" :class="{ thin: r.count < minN }">
+            <tr v-for="r in heat.rank" :key="r.rank" :class="{ thin: r.count < minN }">
               <td>{{ r.rank }}</td><td>{{ r.x_bin_label }}</td><td>{{ r.y_bin_label }}</td>
               <td class="num">{{ r.aggregation }}</td><td>{{ r.count }}<span v-if="r.count < minN" class="tn">thin</span></td>
             </tr>
@@ -152,12 +186,12 @@ watch([xFeat, yFeat, valueField, aggregation, xBins, yBins], run)
 .f select, .f input { padding: 6px 8px; font-size: 12px; border-radius: 8px; border: 1px solid var(--border); background: #fff; color: var(--text); outline: none; }
 .f select:focus, .f input:focus { border-color: var(--accent); box-shadow: var(--ring); }
 .f.sm input { width: 58px; }
-.rng span { display: flex; gap: 4px; }
-.rng input { width: 64px; }
 .seg { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: #fff; }
 .seg button { padding: 6px 12px; font-size: 12px; font-weight: 600; border: none; background: #fff; color: var(--text-2); cursor: pointer; }
 .seg button + button { border-left: 1px solid var(--border); }
 .seg button.on { background: var(--accent-weak); color: var(--accent); }
+.excl { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: #9a3412; background: #ffedd5; border: 1px solid #fdba74; border-radius: 8px; padding: 5px 10px; }
+.excl button { font-size: 11px; font-weight: 600; color: #fff; background: #ea580c; border: none; border-radius: 6px; padding: 3px 9px; cursor: pointer; }
 .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 .cell { min-width: 0; }
 .cap { font-size: 11px; color: var(--text-2); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }

@@ -240,6 +240,7 @@ class TableResponse(BaseModel):
 
 
 # ---------- /api/interaction ----------
+# binning/aggregation/range/outlier 제외는 프론트가 scatter_points로 즉시 계산.
 class InteractionRequest(BaseModel):
     line_id: str
     product: str
@@ -251,11 +252,6 @@ class InteractionRequest(BaseModel):
     x_feature: str
     y_feature: str
     value_field: str                  # 집계 대상 컬럼. "__count__" = wafer 수
-    aggregation: str = "average"      # average | median
-    x_bins: int = 10
-    y_bins: int = 10
-    x_range: Optional[List[float]] = None
-    y_range: Optional[List[float]] = None
     y_target_groups: List[TargetGroup] = []  # value_field가 grouped target일 수 있음
 
 
@@ -265,30 +261,10 @@ class ScatterPoint(BaseModel):
     value: Optional[float] = None
 
 
-class HeatmapCell(BaseModel):
-    x_bin: int
-    y_bin: int
-    x_bin_label: str
-    y_bin_label: str
-    value: Optional[float]
-    count: int
-
-
-class RankRow(BaseModel):
-    rank: int
-    x_bin_label: str
-    y_bin_label: str
-    aggregation: Optional[float]
-    count: int
-
-
 class InteractionResponse(BaseModel):
     x_feature: str
     y_feature: str
     value_field: str
-    aggregation: str
     sampled: bool = False
     n_total: int = 0
     scatter_points: List[ScatterPoint]
-    heatmap_cells: List[HeatmapCell]
-    rank_rows: List[RankRow]
