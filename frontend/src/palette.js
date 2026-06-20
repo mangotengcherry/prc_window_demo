@@ -17,3 +17,6 @@ export const PALETTE = {
 // 분할값(category feature) 오버레이용 범주 색 — multi-line 모드에서 값별 라인 구분.
 // spec 색(vermillion/black)과 충돌하지 않는 Okabe-Ito 계열 순서.
 export const SERIES = ['#0072B2', '#E69F00', '#009E73', '#CC79A7', '#56B4E9']
+
+// 교호작용 scatter/heatmap value 색 — 팀 컨벤션: 높을수록 빨강, 낮을수록 회색.
+export const HEAT_RAMP = ['#d9d9d9', '#fcae91', '#fb6a4a', '#de2d26', '#a50f15']

@@ -298,8 +298,8 @@ async function copyShare() {
           <span class="kv" :class="cpkClass(kpis.worstCpkDc)">{{ kpis.worstCpkDc == null ? '-' : kpis.worstCpkDc.toFixed(2) }}</span><span class="kl">최저 Cpk(DC)</span></div>
         <div class="kpi" :class="'st-' + cpkClass(kpis.worstCpkUser)" :title="'user spec을 입력한 조합들의 Cpk 중 최솟값.\nCpk = min(USU−μ, μ−USL) / (3σ_단기)\nuser spec 미입력이면 \'-\''">
           <span class="kv" :class="cpkClass(kpis.worstCpkUser)">{{ kpis.worstCpkUser == null ? '-' : kpis.worstCpkUser.toFixed(2) }}</span><span class="kl">최저 Cpk(user)</span></div>
-        <div class="kpi" :title="'신뢰도 낮은 조합 수.\n조합의 최대 bin 표본수 < min_n(=' + (columns?.min_n ?? 10) + ') 이면 thin\n표본 부족으로 평균이 불안정'">
-          <span class="kv" :class="{ warnum: kpis.thinN }">{{ kpis.thinN }}</span><span class="kl">thin 조합</span></div>
+        <div class="kpi" :title="'표본 부족 조합 수.\n조합의 최대 bin 표본수 < min_n(=' + (columns?.min_n ?? 10) + ')\n표본이 적어 평균이 불안정한 조합'">
+          <span class="kv" :class="{ warnum: kpis.thinN }">{{ kpis.thinN }}</span><span class="kl">표본 부족 조합</span></div>
       </section>
 
       <section class="rows">

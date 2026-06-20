@@ -29,7 +29,7 @@ const valueField = ref('')
 const aggregation = ref('average')
 const xBins = ref(10)
 const yBins = ref(10)
-const excluded = ref(new Set())  // 제외된 점 index
+const focus = ref(null)  // 영역 선택 { x:[lo,hi], y:[lo,hi] } | null
 
 const result = shallowRef(null)  // 서버 점 배열 → 깊은 reactive 불필요
 const loading = ref(false)
@@ -52,7 +52,7 @@ async function run() {
       x_feature: xFeat.value, y_feature: yFeat.value, value_field: valueField.value,
       y_target_groups: c.y_target_groups || [],
     })
-    excluded.value = new Set()  // 새 데이터 → 제외 초기화
+    focus.value = null  // 새 데이터 → 영역 선택 초기화
   } catch (e) {
     error.value = e.message || '교호작용 분석 실패'
   } finally {
@@ -69,23 +69,19 @@ watch(() => props.cond, (c) => {
 }, { immediate: true })
 watch([xFeat, yFeat, valueField], run)
 
-// ---- 점 + 제외 ----
+// ---- 점 + 영역 선택(focus) — 드래그한 구간의 데이터로 재계산(시계열 brush와 동일 의미) ----
 const points = computed(() => (result.value?.scatter_points || []).map((p, i) => ({ ...p, i })))
-const activePoints = computed(() => points.value.filter((p) => !excluded.value.has(p.i)))
-const excludedCount = computed(() => excluded.value.size)
-function onToggleExclude(i) {
-  const s = new Set(excluded.value)
-  s.has(i) ? s.delete(i) : s.add(i)
-  excluded.value = s
-}
-function onExcludeRegion(idxs) {
-  const s = new Set(excluded.value)
-  idxs.forEach((i) => s.add(i))
-  excluded.value = s
-}
-function clearExcluded() { excluded.value = new Set() }
+const inFocus = (p) => !focus.value ||
+  (p.x >= focus.value.x[0] && p.x <= focus.value.x[1] && p.y >= focus.value.y[0] && p.y <= focus.value.y[1])
+const activePoints = computed(() => focus.value ? points.value.filter(inFocus) : points.value)
+function onFocus(region) { focus.value = region }
+function clearFocus() { focus.value = null }
+const fmt3 = (v) => Number(v.toPrecision(3))
+const focusLabel = computed(() => focus.value
+  ? `${labelOf(xFeat.value)} [${fmt3(focus.value.x[0])}~${fmt3(focus.value.x[1])}] · ${labelOf(yFeat.value)} [${fmt3(focus.value.y[0])}~${fmt3(focus.value.y[1])}]`
+  : '')
 
-// ---- heatmap + rank (프론트 계산, 제외 반영) ----
+// ---- heatmap + rank (프론트 계산, 선택 영역 반영) ----
 function median(a) { const s = [...a].sort((x, y) => x - y); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2 }
 function edges(lo, hi, n) { if (hi <= lo) hi = lo + 1e-9; const out = []; for (let i = 0; i <= n; i++) out.push(lo + (hi - lo) * i / n); return out }
 function binOf(v, lo, hi, n) { if (v < lo || v > hi) return -1; return Math.max(0, Math.min(n - 1, Math.floor((v - lo) / ((hi - lo) || 1e-9) * n))) }
@@ -137,7 +133,7 @@ const heat = computed(() => {
       <h3 class="pane-title">교호작용 분석</h3>
       <span v-if="result" class="ntot">n = {{ activePoints.length }}<span v-if="result.sampled"> · 다운샘플</span></span>
     </div>
-    <p class="ix-sub">차트 작성에 쓴 X feature·Y target 중 2개를 골라 별도로 비교 — 위 window 차트와 독립이며, 여기서 제외한 outlier는 이 패널에만 적용됩니다.</p>
+    <p class="ix-sub">차트 작성에 쓴 X feature·Y target 중 2개를 골라 별도로 비교 — 위 window 차트와 독립입니다. scatter에서 영역을 드래그하면 그 구간 데이터로 heatmap·순위가 다시 계산됩니다(시계열 기간 brush와 동일).</p>
 
     <div class="controls">
       <label class="f">X축<select v-model="xFeat"><option v-for="o in featOptions" :key="'x' + o.key" :value="o.key">{{ o.label }} · {{ o.grp }}</option></select></label>
@@ -151,8 +147,8 @@ const heat = computed(() => {
       </div>
       <label class="f sm">X bins<input type="number" min="2" max="40" v-model.number="xBins" /></label>
       <label class="f sm">Y bins<input type="number" min="2" max="40" v-model.number="yBins" /></label>
-      <div v-if="excludedCount" class="excl">제외 {{ excludedCount }}개 · 회색 점 클릭 = 복원<button @click="clearExcluded">초기화</button></div>
-      <span v-else-if="points.length" class="exclhint" title="scatter에서 점을 클릭하거나 영역을 드래그(우상단 brush)하면 outlier를 제외하고 heatmap·순위가 다시 계산됩니다">💡 점 클릭·영역 드래그 = outlier 제외</span>
+      <div v-if="focus" class="excl" :title="focusLabel">선택 영역 {{ activePoints.length }}점<button @click="clearFocus">전체 보기</button></div>
+      <span v-else-if="points.length" class="exclhint" title="scatter에서 우상단 brush로 영역을 드래그하면 그 구간 데이터로 heatmap·순위가 다시 계산됩니다 (시계열 기간 brush와 동일)">💡 영역 드래그 = 그 구간으로 재계산</span>
     </div>
 
     <p v-if="error" class="banner err">⚠ {{ error }}</p>
@@ -161,13 +157,12 @@ const heat = computed(() => {
 
     <div v-if="points.length" class="charts">
       <div class="cell">
-        <div class="cap">Scatter <small>{{ labelOf(yFeat) }} vs {{ labelOf(xFeat) }} · 점 클릭/영역 brush로 outlier 제외</small></div>
-        <InteractionScatter :points="points" :excluded="excluded" :x-label="labelOf(xFeat)" :y-label="labelOf(yFeat)"
-          :value-label="labelOf(valueField)" :sampled="result.sampled"
-          @toggle-exclude="onToggleExclude" @exclude-region="onExcludeRegion" />
+        <div class="cap">Scatter <small>{{ labelOf(yFeat) }} vs {{ labelOf(xFeat) }} · 영역 드래그 = 그 구간 재계산</small></div>
+        <InteractionScatter :points="points" :focus="focus" :x-label="labelOf(xFeat)" :y-label="labelOf(yFeat)"
+          :value-label="labelOf(valueField)" :sampled="result.sampled" @focus="onFocus" />
       </div>
       <div class="cell">
-        <div class="cap">Heatmap <small>{{ labelOf(valueField) }} ({{ aggregation === 'median' ? '중앙값' : '평균' }}){{ excludedCount ? ' · 제외 반영' : '' }}</small></div>
+        <div class="cap">Heatmap <small>{{ labelOf(valueField) }} ({{ aggregation === 'median' ? '중앙값' : '평균' }}){{ focus ? ' · 선택 영역' : '' }}</small></div>
         <InteractionHeatmap :cells="heat.cells" :x-bins="xBins" :y-bins="yBins"
           :x-label="labelOf(xFeat)" :y-label="labelOf(yFeat)" :value-label="labelOf(valueField)" :min-count="minN" />
       </div>
@@ -179,7 +174,7 @@ const heat = computed(() => {
         <table>
           <thead><tr><th>#</th><th>{{ labelOf(xFeat) }}</th><th>{{ labelOf(yFeat) }}</th><th>집계값</th><th>n</th></tr></thead>
           <tbody>
-            <tr v-for="r in heat.rank" :key="r.rank" :class="{ thin: r.count < minN }" :title="r.count < minN ? `표본 ${r.count} < ${minN} — 신뢰도 낮음(thin)` : ''">
+            <tr v-for="r in heat.rank" :key="r.rank" :class="{ thin: r.count < minN }" :title="r.count < minN ? `표본 ${r.count} < ${minN} — 신뢰도 낮음` : ''">
               <td>{{ r.rank }}</td><td>{{ r.x_bin_label }}</td><td>{{ r.y_bin_label }}</td>
               <td class="num">{{ r.aggregation }}</td><td>{{ r.count }}</td>
             </tr>

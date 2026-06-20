@@ -77,7 +77,7 @@ const ck = (v) => (v == null ? '' : (v < 1 ? 'bad' : (v < 1.33 ? 'warn' : 'good'
       <span class="title">{{ xName }} × {{ combo.y_target }}
         <span v-if="multi" class="cf">· 겹쳐보기 {{ members.length }}</span>
         <span v-else-if="combo.category_feature_value" class="cf">· {{ combo.category_feature_value }}</span>
-        <span v-if="thin" class="thin" title="표본 부족 — 신뢰도 낮음">thin</span>
+        <span v-if="thin" class="thin" title="bin당 표본수가 min_n보다 적어 평균이 불안정합니다">표본 부족</span>
       </span>
       <span class="spec">
         <span class="lbl">user spec<span v-if="multi" class="shared" title="겹쳐보기 모드: 이 spec은 분할값 전체에 공유 적용됩니다">· 전체 값 공유</span></span>
