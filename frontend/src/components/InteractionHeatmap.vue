@@ -4,6 +4,7 @@
 import { computed } from 'vue'
 import VChart from 'vue-echarts'
 import '../echarts.js'
+import { HEAT_RAMP } from '../palette.js'
 
 const props = defineProps({
   cells: { type: Array, default: () => [] },   // [{ x_bin, y_bin, x_bin_label, y_bin_label, value, count }]
@@ -33,11 +34,11 @@ const option = computed(() => {
     tooltip: { position: 'top', formatter: (p) =>
       `${props.xLabel}: ${p.data.xl}<br/>${props.yLabel}: ${p.data.yl}` +
       `<br/>${props.valueLabel}: ${p.data.value[2]}<br/>n = ${p.data.count}` +
-      (p.data.count < props.minCount ? ` <span style="color:#b45309">(thin)</span>` : '') },
+      (p.data.count < props.minCount ? ` <span style="color:#b45309">(표본 부족)</span>` : '') },
     visualMap: {
       type: 'continuous', min: vmin, max: vmax, calculable: true,
       orient: 'horizontal', left: 'center', top: 0, itemWidth: 11, itemHeight: 110, precision: 1,
-      text: ['집계 높음', '낮음'], textStyle: { fontSize: 9 }, inRange: { color: ['#440154', '#21918c', '#fde725'] },
+      text: ['집계 높음', '낮음'], textStyle: { fontSize: 9 }, inRange: { color: HEAT_RAMP },
     },
     grid: { left: 64, right: 40, top: 32, bottom: 72 },
     xAxis: { type: 'category', data: xLabels.value, name: props.xLabel, nameLocation: 'middle', nameGap: 52,

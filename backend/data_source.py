@@ -18,7 +18,8 @@ import pandas as pd
 # 데모 파라미터 (실데이터로 교체하면 대부분 불필요 — 참고용)
 # ─────────────────────────────────────────────────────────────────────────────
 _NOW = pd.Timestamp("2026-06-19")     # 데모 기준 "현재"(lag 미확보 구간 생성용)
-_LAG_DAYS = 60                        # EDS 확보 지연(일)
+_LAG_MIN, _LAG_MAX = 50, 60           # EDS 확보 지연(일) — wafer마다 50~60일 변동
+_LAG_DAYS = _LAG_MAX                  # 명목 lag(provenance "~N일 이전 기준" 표기용)
 _N_WAFERS = 1600
 
 _TARGETS_BY_CATEGORY = {
@@ -132,20 +133,38 @@ def fact_table() -> pd.DataFrame:
     lines = ["AAAA", "BBBB", "CCCC", "DDDD"]
     products = ["AAEQ", "BBCR", "CCAK", "DDGQ"]
 
+    def _center(key):
+        s = dcs.get(key, {"lower": 90, "upper": 130})
+        return (s["lower"] + s["upper"]) / 2, (s["upper"] - s["lower"]) / 4
+    # 추정/window 분석이 의미 있도록 BIN target을 첫 fab_step의 한 feature(driver)에 약하게 의존시킴
+    driver_key = next((k for k in num_keys if k.split("|")[1] == fab_steps[0]), None)
+    driver_c = _center(driver_key)[0] if driver_key else 0.0
+
     rows = []
     for w in range(_N_WAFERS):
         wid = f"W{w:05d}"
         line = rng.choice(lines)
         product = rng.choice(products)
         wafer_start = _NOW - pd.Timedelta(days=int(rng.integers(5, 210)))
+        # EDS 확보 지연은 wafer마다 변동(먼저 팹아웃→먼저 테스트). 고정 60일 아님.
+        lag = int(rng.integers(_LAG_MIN, _LAG_MAX + 1))
         cat_feat_vals = {cf: rng.choice(vals) for cf, vals in _CATEGORY_FEATURE_VALUES.items()}
-        # wafer-level target (numeric). 일부 feature와 약한 관계(시각화용)
-        target_vals = {t: float(rng.normal(500 if t.startswith("BIN") else 50, 30)) for t in all_targets}
 
+        # 1) wafer의 모든 numeric feature 값 먼저 생성
+        feats = {}
+        for key in num_keys:
+            c, sd = _center(key)
+            feats[key] = float(rng.normal(c, sd))
+        # 2) target — BIN은 driver feature에 약한 선형 의존 + 노이즈, 그 외는 무작위
+        dep = 3.0 * (feats[driver_key] - driver_c) if driver_key else 0.0
+        target_vals = {t: (float(500 + dep + rng.normal(0, 18)) if t.startswith("BIN")
+                           else float(rng.normal(50, 30))) for t in all_targets}
+
+        # 3) row 생성
         for si, fab in enumerate(fab_steps):
             fab_tko = wafer_start + pd.Timedelta(hours=6 * si)
-            eds_tko = wafer_start + pd.Timedelta(days=_LAG_DAYS) + pd.Timedelta(hours=6 * si)
-            observed = eds_tko <= _NOW
+            eds_tko = wafer_start + pd.Timedelta(days=lag) + pd.Timedelta(hours=6 * si)
+            observed = eds_tko <= _NOW  # 최근 ~lag일은 미확보(target NaN) → 추정 대상
             row = {
                 "wafer_id": wid, "line_id": line, "product": product, "fab_step": fab,
                 "fab_track_out_time": fab_tko, "eds_tkout_time": eds_tko, "observed": bool(observed),
@@ -153,9 +172,7 @@ def fact_table() -> pd.DataFrame:
             row.update(cat_feat_vals)
             for key in num_keys:
                 if key.split("|")[1] == fab:  # 이 fab_step의 feature만 값
-                    spec = dcs.get(key, {"lower": 90, "upper": 130})
-                    center = (spec["lower"] + spec["upper"]) / 2
-                    row[key] = float(rng.normal(center, (spec["upper"] - spec["lower"]) / 4))
+                    row[key] = feats[key]
             for t in all_targets:
                 row[t] = target_vals[t] if observed else np.nan  # observed-only
             rows.append(row)

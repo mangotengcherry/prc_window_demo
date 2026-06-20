@@ -57,14 +57,18 @@ const groupMas = computed(() => (props.groups || []).map((g) => ({ t: movingAver
 // 선택 구간 밴드 (linked brushing의 시각적 앵커 — brush가 사라져도 남음)
 const selBand = () => props.selection ? { silent: true, itemStyle: { color: 'rgba(79,70,229,0.07)' }, data: [[{ xAxis: props.selection[0] }, { xAxis: props.selection[1] }]] } : undefined
 
-// feature spec(user/DC) 수평선 — 라벨 흰 배경 칩으로 축 눈금과 겹쳐도 가독
-const hl = (v, color, label) => ({ yAxis: v, lineStyle: { color, type: 'dashed', width: 2 }, label: { formatter: label, fontSize: 9, color, position: 'start', backgroundColor: '#fff', padding: [1, 3], borderRadius: 2 } })
+// 수평선 라벨 — 각 선의 우측 끝, upper=위쪽/lower=아래쪽에 배치(좌측 y축 이름과 겹침 방지)
+function hLabel(label, color, upper) {
+  return { formatter: label, fontSize: 9, color, position: 'end', align: 'right',
+    verticalAlign: upper ? 'bottom' : 'top', backgroundColor: '#fff', padding: [1, 3], borderRadius: 2 }
+}
+const hl = (v, color, label, upper) => ({ yAxis: v, lineStyle: { color, type: 'dashed', width: 2 }, label: hLabel(label, color, upper) })
 function featLines() {
   const out = []
-  if (props.spec.lower != null) out.push(hl(props.spec.lower, C.specUser, 'USL'))
-  if (props.spec.upper != null) out.push(hl(props.spec.upper, C.specUser, 'USU'))
-  if (props.dcSpec.lower != null) out.push(hl(props.dcSpec.lower, C.specDc, 'DC-L'))
-  if (props.dcSpec.upper != null) out.push(hl(props.dcSpec.upper, C.specDc, 'DC-U'))
+  if (props.spec.lower != null) out.push(hl(props.spec.lower, C.specUser, 'USL', false))
+  if (props.spec.upper != null) out.push(hl(props.spec.upper, C.specUser, 'USU', true))
+  if (props.dcSpec.lower != null) out.push(hl(props.dcSpec.lower, C.specDc, 'DC-L', false))
+  if (props.dcSpec.upper != null) out.push(hl(props.dcSpec.upper, C.specDc, 'DC-U', true))
   return out
 }
 
@@ -113,10 +117,9 @@ function singleOption() {
   const tcl = props.target?.control_limits
   const clMark = (cl, color) => {
     if (!cl) return []
-    const lbl = (t) => ({ formatter: t, fontSize: 9, color, position: 'start', backgroundColor: '#fff', padding: [1, 3], borderRadius: 2 })
     return [
-      { yAxis: cl.ucl, lineStyle: { color, type: 'dashed', width: 1, opacity: 0.7 }, label: lbl('UCL') },
-      { yAxis: cl.lcl, lineStyle: { color, type: 'dashed', width: 1, opacity: 0.7 }, label: lbl('LCL') },
+      { yAxis: cl.ucl, lineStyle: { color, type: 'dashed', width: 1, opacity: 0.7 }, label: hLabel('UCL', color, true) },
+      { yAxis: cl.lcl, lineStyle: { color, type: 'dashed', width: 1, opacity: 0.7 }, label: hLabel('LCL', color, false) },
     ]
   }
   return {
