@@ -164,7 +164,9 @@ const hasData = computed(() => isMulti.value
 const estInfo = computed(() => {
   if (!props.showEstimate || isMulti.value || !props.estimate?.fit_summary || !props.estimate.points?.length) return null
   const f = props.estimate.fit_summary
-  return { r2: f.r2, n: f.n, count: props.estimate.points.length, weak: f.r2 != null && f.r2 < 0.2 }
+  const extrap = f.extrap ?? 0  // 추정 X가 관측 범위 밖 비율(외삽)
+  return { r2: f.r2, n: f.n, count: props.estimate.points.length, extrap,
+           weak: (f.r2 != null && f.r2 < 0.2) || extrap >= 0.5 }
 })
 // 인사이트 4: feature 추세/drift 감지 (최근 평균이 기준 대비 σ 이동, flagged면 배지)
 const driftInfo = computed(() => {
@@ -260,8 +262,8 @@ const option = computed(() => (isMulti.value ? multiOption() : singleOption()))
   <div class="ts">
     <span v-if="sampled" class="ds">다운샘플 표시</span>
     <span v-if="estInfo" class="est" :class="{ weak: estInfo.weak }"
-      :title="`추정 y~x 회귀 · R²=${estInfo.r2 ?? '-'} · 적합 n=${estInfo.n} · 추정 ${estInfo.count}점` + (estInfo.weak ? ' · 적합도 낮음(참고용)' : '')">
-      추정 R² {{ estInfo.r2 == null ? '-' : estInfo.r2.toFixed(2) }}{{ estInfo.weak ? ' ⚠' : '' }}
+      :title="`추정 y~x 회귀 · R²=${estInfo.r2 ?? '-'} · 적합 n=${estInfo.n} · 추정 ${estInfo.count}점 · 외삽 ${Math.round(estInfo.extrap*100)}%(추정 X가 관측 범위 밖)` + (estInfo.weak ? ' · 신뢰 낮음(참고용)' : '')">
+      추정 R² {{ estInfo.r2 == null ? '-' : estInfo.r2.toFixed(2) }}<span v-if="estInfo.extrap >= 0.2"> · 외삽 {{ Math.round(estInfo.extrap*100) }}%</span>{{ estInfo.weak ? ' ⚠' : '' }}
     </span>
     <span v-if="driftInfo" class="drift" :title="`feature 최근(마지막 20%) 평균이 기준 대비 ${driftInfo.shift >= 0 ? '+' : ''}${driftInfo.shift}σ 이동 — 추세/drift 감지`">
       ⚠ 추세 {{ driftInfo.direction === 'up' ? '↑' : '↓' }} {{ driftInfo.shift >= 0 ? '+' : '' }}{{ driftInfo.shift }}σ

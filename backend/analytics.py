@@ -39,7 +39,7 @@ def _with_target_groups(df: pd.DataFrame, groups) -> pd.DataFrame:
         srcs = [s for s in g.sources if s in df.columns]
         if not srcs:
             continue
-        df[g.name] = df[srcs].sum(axis=1, min_count=1)  # 현재 sum만
+        df[g.name] = df[srcs].sum(axis=1, min_count=len(srcs))  # 모든 source가 있어야 합산(부분 결측 시 NaN — 부분합 방지)
     return df
 
 
@@ -238,9 +238,13 @@ def _fit_estimate(obs_rows: pd.DataFrame, sub: pd.DataFrame, xf: str, yt: str):
     r2 = (1 - ss_res / ss_tot) if ss_tot else None
     # 미관측(=y 미확보) wafer를 x로 추정
     un = sub[sub[xf].notna() & (~sub["observed"])].sort_values("fab_track_out_time")
+    un_x = un[xf].to_numpy(dtype=float)
     pts = [[t.isoformat(), round(float(slope * xx + intercept), 4)] for t, xx in zip(un["fab_track_out_time"], un[xf])]
+    # 외삽 비율: 추정 대상 X가 관측(적합) X 범위를 벗어난 비율 — 회귀 신뢰도 가드(외삽일수록 예측 불확실)
+    extrap = float(np.mean((un_x < x.min()) | (un_x > x.max()))) if un_x.size else 0.0
     fit = {"slope": round(slope, 6), "intercept": round(intercept, 4),
-           "r2": round(float(r2), 4) if r2 is not None else None, "n": int(len(o))}
+           "r2": round(float(r2), 4) if r2 is not None else None, "n": int(len(o)),
+           "extrap": round(extrap, 3)}
     return pts, fit, _id_pairs(un)
 
 
@@ -285,8 +289,13 @@ def compute_timeseries(req) -> dict:
                         mean_pred = float(np.mean(pv))
                         sig = cl.get("sigma") or 0
                         shift = round((mean_pred - float(obs[yt].mean())) / sig, 2) if sig else 0.0
+                        # 신뢰 가드: 저R²(<0.2) 또는 다수 외삽(≥50%)이면 예보를 단정 경보 대신 "참고용"으로
+                        r2 = fit.get("r2") if fit else None
+                        extrap = fit.get("extrap", 0.0) if fit else 0.0
+                        low_conf = bool(r2 is None or r2 < 0.2 or extrap >= 0.5)
                         forecast = {"oos": int(oos), "n": len(pts), "ucl": cl["ucl"], "lcl": cl["lcl"],
-                                    "shift": shift, "mean_pred": round(mean_pred, 2)}
+                                    "shift": shift, "mean_pred": round(mean_pred, 2),
+                                    "r2": r2, "extrap": extrap, "low_conf": low_conf}
                     estimates.append({"x_feature": xf, "y_target": yt,
                                       "category_feature_value": cf_val, "points": pts,
                                       "point_ids": pt_ids, "fit_summary": fit, "forecast": forecast})

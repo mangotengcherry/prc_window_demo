@@ -105,20 +105,22 @@ cd frontend && npm install && npm run dev   # http://localhost:5173
 - `GET /api/columns`(line_ids·products·categories·eds_steps·targets_by_category·fab_steps·metro_grades/categories·category_feature_values·dc_spec·units·min_n·max_combos·date_default·target_date_default)
 - `GET /api/x-feature-options`(matching·grade·category 필터 + 영향도 score=|corr|)
 - `POST /api/binned|timeseries|table`(date_range + target_date_range + category_feature + y_target_groups + selection)
-- `POST /api/interaction`(scatter·heatmap·rank)
+- `POST /api/interaction`(scatter points만 — heatmap·rank·focus 재계산은 프론트에서)
+- `POST /api/drivers`(target별 |corr| driver 랭킹)
+- `POST /api/raw`(현재 조건 wafer 원시 CSV — 식별자(root_lot_id·wafer_id)·분할·선택 feature/target, UTF-8 BOM)
 
 ### M2 기능별 구현 (각 단계 커밋, public repo)
 1. **분할(category) 모드**: 분리(split)=값별 ComboRow / 겹쳐보기(multi_line)=한 차트 추세선 오버레이 + 토글. (`5f17d8e`,`da82acd`)
 2. **grouped target**: 여러 Y를 합산한 인라인(stateless) 합성 target. 생성 다이얼로그(중복 overwrite/rename/cancel), localStorage 보유, 표 "그룹" 배지. (`1f367ca`,`a0d8d20`)
-3. **interaction 패널**: 두 feature × value_field → scatter/heatmap(viridis·저카운트 디엠퍼시스)/rank, 평균·중앙값, bin/range. (`d30d086`,`4f5d621`)
-4. **추정값**: 미관측 wafer y를 조합별 y~x 선형회귀로 추정(wafer_id join), 시계열에 속빈 다이아몬드 + R² 신뢰도 배지. 토글. (`f49becf`,`af79154`)
-5. **추천 window**: n≥min_n 인접 bin 중 y_avg 분산 최소(평평한 구간) band 오버레이. (`8f38cc1`)
+3. **interaction 패널**: 두 feature × value_field → scatter/heatmap(red/grey HEAT_RAMP 팀컨벤션·저카운트 디엠퍼시스)/rank, 평균·중앙값, bin/range. scatter 점 hover=wafer 식별 툴팁, 순위표↔heatmap 연동, 영역 drag=focus 재계산. (`d30d086`,`4f5d621`,`2d26c96`)
+4. **추정값**: 미관측 wafer y를 조합별 y~x 선형회귀로 추정(wafer_id join), 시계열에 속빈 다이아몬드 + R² 신뢰도 배지. 관측 vs 추정 구간 평균 비교 세그먼트. 토글. (`f49becf`,`af79154`)
+5. ~~**추천 window**: n≥min_n 인접 bin band 오버레이.~~ → **제거됨**(정합성 우려로 롤백, 사용자 요청).
 6. **provenance + 공유 URL**: 출처·기간·표본·쿼리ID 한 줄 + lag 주의(R5), `?q=`(base64) 직렬화로 화면 재현. (`42ce45b`)
 7. **linked brushing**: 시계열 기간 brush → 해당 wafer로 window·table 재집계(시계열은 전체). (`cf118c3`)
 
 ### 통계 방법론
 - **Cpk**(단기 σ=이동범위 MR/1.128) vs **Ppk**(전체 σ). DC spec 기준은 user 입력 없이 항상, user spec 기준은 입력 시. in-spec%는 정규근사 Φ.
-- 색맹 안전(Okabe-Ito) 팔레트(`palette.js`), 분할 오버레이는 `SERIES`, 히트맵/scatter value는 viridis.
+- 색맹 안전(Okabe-Ito) 팔레트(`palette.js`), 분할 오버레이는 `SERIES`, 히트맵/scatter value는 red/grey `HEAT_RAMP`(팀 컨벤션: 높음=빨강·낮음=회색).
 
 ### 함정 메모
 - ECharts는 모듈을 `use()`로 등록해야 함(`echarts.js`) — Heatmap/VisualMap/Brush/Toolbox/MarkArea 누락 시 조용히 미렌더.
