@@ -50,3 +50,7 @@ export function fetchTable(cond) {
 export function fetchInteraction(req) {
   return call(async () => (await api.post('/interaction', req)).data)
 }
+
+export function fetchDrivers(cond) {
+  return call(async () => (await api.post('/drivers', cond)).data)
+}

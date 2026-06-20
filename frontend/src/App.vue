@@ -6,7 +6,7 @@ import ComboRow from './components/ComboRow.vue'
 import DataTable from './components/DataTable.vue'
 // 보조 분석 패널(차트 3개) — 결과가 있을 때만 필요 → 지연 로드로 초기 번들·파싱 분리
 const InteractionPanel = defineAsyncComponent(() => import('./components/InteractionPanel.vue'))
-import { fetchColumns, fetchXFeatureOptions, fetchBinned, fetchTimeseries, fetchTable } from './api/client.js'
+import { fetchColumns, fetchXFeatureOptions, fetchBinned, fetchTimeseries, fetchTable, fetchDrivers } from './api/client.js'
 import { cpk } from './stats.js'
 import { SERIES } from './palette.js'
 import { queryId, shareUrl, condFromUrl } from './share.js'
@@ -19,6 +19,7 @@ const sidebarRef = ref(null)
 const binned = shallowRef(null)
 const timeseries = shallowRef(null)
 const tableRows = shallowRef([])
+const driversData = shallowRef([]) // 인사이트 2: target별 영향 요인 랭킹
 const specByCombo = reactive({})
 
 const status = ref('initial') // initial | loading | loaded | empty | error
@@ -57,10 +58,11 @@ async function onDraw(cond) {
   errorMsg.value = ''
   selection.value = null // 새 분석은 brush 선택 초기화
   try {
-    const [b, t, tbl] = await Promise.all([fetchBinned(cond), fetchTimeseries(cond), fetchTable(cond)])
+    const [b, t, tbl, dr] = await Promise.all([fetchBinned(cond), fetchTimeseries(cond), fetchTable(cond), fetchDrivers(cond)])
     binned.value = b
     timeseries.value = t
     tableRows.value = tbl.rows
+    driversData.value = dr.targets || []
     const mode = cond.category_feature?.chart_mode
     b.combos.forEach((c) => {
       // 겹쳐보기(multi_line)는 (x,y) 1행에 공유 spec, 분리(split)는 분할값별 spec
@@ -317,6 +319,21 @@ async function copyShare() {
           <span class="kv" :class="forecast.oos > 0 ? 'bad' : (Math.abs(forecast.maxShift) >= 1 ? 'warn' : '')">{{ forecast.oos }}<small class="shift" v-if="Math.abs(forecast.maxShift) >= 0.5">{{ forecast.maxShift >= 0 ? '+' : '' }}{{ forecast.maxShift }}σ</small></span><span class="kl">추정 OOS ⓘ</span></div>
       </section>
 
+      <section v-if="status === 'loaded' && driversData.length" class="drivers-area">
+        <h3 class="pane-title">영향 요인 (driver) 랭킹 <small>선택 target에 영향이 큰 feature 순 (|corr|, 관측 wafer)</small></h3>
+        <div class="dgrid">
+          <div v-for="t in driversData" :key="t.target" class="dcard">
+            <div class="dtitle">{{ t.target }}</div>
+            <div v-for="d in t.drivers.slice(0, 5)" :key="d.feature" class="drow" :title="d.display_name + ' · corr ' + d.corr + ' · n=' + d.n">
+              <span class="dname">{{ d.display_name }}</span>
+              <div class="dbar"><div class="dfill" :class="{ neg: d.corr < 0 }" :style="{ width: Math.max(2, d.abs * 100) + '%' }"></div></div>
+              <span class="dval" :class="{ neg: d.corr < 0 }">{{ d.corr >= 0 ? '+' : '' }}{{ d.corr }}</span>
+            </div>
+            <p v-if="!t.drivers.length" class="dnone">표본 부족</p>
+          </div>
+        </div>
+      </section>
+
       <section class="rows">
         <ComboRow v-for="(r, i) in rows" :key="r.key" :combo="r.combo"
                   :target="r.target" :feature="r.feature" :stats="r.stats"
@@ -387,6 +404,19 @@ async function copyShare() {
 .kv.good { color: #166534; } .kv.warn { color: #854d0e; } .kv.bad { color: #991b1b; } .kv.warnum { color: #854d0e; }
 .kv .shift { font-size: 11px; font-weight: 600; margin-left: 4px; opacity: .85; }
 .kl { font-size: 11px; color: var(--text-2); text-transform: uppercase; letter-spacing: .03em; }
+.drivers-area { padding: 14px 32px 0; display: flex; flex-direction: column; gap: 8px; }
+.drivers-area .pane-title small { text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--text-2); margin-left: 6px; }
+.dgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
+.dcard { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-sm); padding: 12px 14px; }
+.dtitle { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
+.drow { display: grid; grid-template-columns: 110px 1fr 44px; align-items: center; gap: 8px; margin-bottom: 5px; cursor: help; }
+.dname { font-size: 11px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dbar { height: 9px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
+.dfill { height: 100%; background: var(--accent); border-radius: 999px; }
+.dfill.neg { background: #e8833a; }
+.dval { font-size: 11px; font-weight: 700; color: var(--accent); text-align: right; }
+.dval.neg { color: #b45309; }
+.dnone { font-size: 11px; color: var(--text-2); margin: 4px 0 0; }
 .rows { display: flex; flex-direction: column; gap: 16px; padding: 16px 32px; }
 .table-area { padding: 4px 32px 36px; display: flex; flex-direction: column; gap: 10px; }
 .ix-area { padding: 0 32px 40px; }
