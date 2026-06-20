@@ -179,6 +179,20 @@ const kpis = computed(() => {
 })
 function cpkClass(v) { return v == null ? '' : (v < 1 ? 'bad' : (v < 1.33 ? 'warn' : 'good')) }
 
+// 인사이트 5: 조건(분할값) 비교 랭킹 — (feature×target)별로 분할값을 target 평균순 정렬 + Cpk
+const conditionCompare = computed(() => {
+  const g = {}
+  tableRows.value.forEach((r) => {
+    if (r.category_feature_value == null) return  // 분할 없으면 비교 대상 아님
+    const k = r.x_feature + '__' + r.y_target
+    if (!g[k]) g[k] = { key: k, feature: r.x_feature_display_name || r.x_feature, target: r.y_target, items: [] }
+    g[k].items.push({ cfv: r.category_feature_value, mean: r.mean, cpkc: cpk(r.x_value, r.x_std_within, r.dc_lower, r.dc_upper), n: r.n })
+  })
+  return Object.values(g)
+    .map((x) => ({ ...x, items: x.items.filter((i) => i.mean != null).sort((a, b) => b.mean - a.mean) }))
+    .filter((x) => x.items.length > 1)
+})
+
 // 인사이트 3: 공정능력(Cpk) 요약 — feature가 DC spec 대비 안정적인지(약한 순). Cpk(DC)는 feature 단위.
 const capability = computed(() => {
   const m = {}
@@ -356,6 +370,24 @@ async function copyShare() {
         </div>
       </section>
 
+      <section v-if="status === 'loaded' && conditionCompare.length" class="drivers-area">
+        <h3 class="pane-title">조건 비교 (랭킹) <small>분할값별 target 평균 순 — 어느 조건이 나은지 (Cpk 함께)</small></h3>
+        <div class="dgrid">
+          <div v-for="g in conditionCompare" :key="g.key" class="dcard">
+            <div class="dtitle">{{ g.feature }} × {{ g.target }}</div>
+            <table class="ctab">
+              <tr v-for="(c, i) in g.items" :key="c.cfv" :class="{ best: i === 0 }">
+                <td class="crank">{{ i + 1 }}</td>
+                <td class="ccfv">{{ c.cfv }}</td>
+                <td class="cnum">{{ c.mean == null ? '-' : c.mean.toFixed(1) }}</td>
+                <td><span class="cpkv" :class="cpkClass(c.cpkc)">{{ c.cpkc == null ? '-' : c.cpkc.toFixed(2) }}</span></td>
+                <td class="cn">n={{ c.n }}</td>
+              </tr>
+            </table>
+          </div>
+        </div>
+      </section>
+
       <section class="rows">
         <ComboRow v-for="(r, i) in rows" :key="r.key" :combo="r.combo"
                   :target="r.target" :feature="r.feature" :stats="r.stats"
@@ -445,6 +477,15 @@ async function copyShare() {
 .cfill.good { background: #16a34a; } .cfill.warn { background: #d97706; } .cfill.bad { background: #dc2626; }
 .cpkv { font-size: 11px; font-weight: 700; text-align: right; }
 .cpkv.good { color: #166534; } .cpkv.warn { color: #854d0e; } .cpkv.bad { color: #991b1b; }
+.ctab { width: 100%; border-collapse: collapse; font-size: 12px; }
+.ctab td { padding: 4px 6px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.ctab tr:last-child td { border-bottom: none; }
+.ctab tr.best td { background: var(--accent-weak); }
+.ctab tr.best .ccfv { font-weight: 700; color: var(--accent); }
+.crank { color: var(--text-2); width: 16px; }
+.ccfv { width: 40%; overflow: hidden; text-overflow: ellipsis; }
+.cnum { font-weight: 700; text-align: right; }
+.cn { color: var(--text-2); font-size: 10px; text-align: right; }
 .rows { display: flex; flex-direction: column; gap: 16px; padding: 16px 32px; }
 .table-area { padding: 4px 32px 36px; display: flex; flex-direction: column; gap: 10px; }
 .ix-area { padding: 0 32px 40px; }
