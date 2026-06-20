@@ -177,6 +177,19 @@ const kpis = computed(() => {
 })
 function cpkClass(v) { return v == null ? '' : (v < 1 ? 'bad' : (v < 1.33 ? 'warn' : 'good')) }
 
+// 인사이트 1: lag 기반 OOS 사전 예측 — 미확보 wafer 추정이 target 관리한계를 벗어날 예측 수 + 추정 평균 이동(σ)
+const forecast = computed(() => {
+  const ests = (timeseries.value?.estimates || []).filter((e) => e.forecast)
+  if (!ests.length) return null
+  let oos = 0, n = 0, maxShift = 0, best = null
+  ests.forEach((e) => {
+    oos += e.forecast.oos; n += e.forecast.n
+    if (Math.abs(e.forecast.shift) > Math.abs(maxShift)) maxShift = e.forecast.shift
+    if (!best || (e.fit_summary?.r2 ?? 0) > (best.fit_summary?.r2 ?? 0)) best = e
+  })
+  return { oos, n, maxShift, r2: best?.fit_summary?.r2 ?? null }
+})
+
 const condSummary = computed(() => {
   const c = lastCond.value
   if (!c) return ''
@@ -299,6 +312,9 @@ async function copyShare() {
           <span class="kv" :class="cpkClass(kpis.worstCpkUser)">{{ kpis.worstCpkUser == null ? '-' : kpis.worstCpkUser.toFixed(2) }}</span><span class="kl">최저 Cpk(user)</span></div>
         <div class="kpi" :title="'표본 부족 조합 수.\n조합의 최대 bin 표본수 < min_n(=' + (columns?.min_n ?? 10) + ')\n표본이 적어 평균이 불안정한 조합'">
           <span class="kv" :class="{ warnum: kpis.thinN }">{{ kpis.thinN }}</span><span class="kl">표본 부족 조합</span></div>
+        <div v-if="forecast" class="kpi" :class="forecast.oos > 0 ? 'st-bad' : (Math.abs(forecast.maxShift) >= 1 ? 'st-warn' : '')"
+          :title="'lag 기반 사전예측: 미확보(최근 ~' + (columns?.lag_days ?? 60) + '일) wafer를 y~x 회귀로 추정 → target 관리한계(±3σ) 초과 예측 수.\n미확보 batch 추정 평균이 관측 평균 대비 ' + (forecast.maxShift >= 0 ? '+' : '') + forecast.maxShift + 'σ 이동(잠복 drift).\n신뢰도: 추정 R²=' + (forecast.r2 == null ? '-' : forecast.r2.toFixed(2))">
+          <span class="kv" :class="forecast.oos > 0 ? 'bad' : (Math.abs(forecast.maxShift) >= 1 ? 'warn' : '')">{{ forecast.oos }}<small class="shift" v-if="Math.abs(forecast.maxShift) >= 0.5">{{ forecast.maxShift >= 0 ? '+' : '' }}{{ forecast.maxShift }}σ</small></span><span class="kl">추정 OOS ⓘ</span></div>
       </section>
 
       <section class="rows">
@@ -369,6 +385,7 @@ async function copyShare() {
 .kpi.st-bad { border-left: 3px solid #dc2626; }
 .kv { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; }
 .kv.good { color: #166534; } .kv.warn { color: #854d0e; } .kv.bad { color: #991b1b; } .kv.warnum { color: #854d0e; }
+.kv .shift { font-size: 11px; font-weight: 600; margin-left: 4px; opacity: .85; }
 .kl { font-size: 11px; color: var(--text-2); text-transform: uppercase; letter-spacing: .03em; }
 .rows { display: flex; flex-direction: column; gap: 16px; padding: 16px 32px; }
 .table-area { padding: 4px 32px 36px; display: flex; flex-direction: column; gap: 10px; }
