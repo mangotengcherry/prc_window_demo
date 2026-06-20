@@ -105,12 +105,6 @@ class Bin(BaseModel):
     n_observed: Optional[int] = None
 
 
-class RecommendedWindow(BaseModel):
-    lower: float
-    upper: float
-    score: float  # y_avg 표준편차(작을수록 안정)
-
-
 class Combo(BaseModel):
     x_feature: str
     x_feature_display_name: str
@@ -120,7 +114,6 @@ class Combo(BaseModel):
     category_feature_name: Optional[str] = None
     category_feature_value: Optional[str] = None
     bins: List[Bin]
-    recommended_window: Optional[RecommendedWindow] = None
 
 
 class BinnedResponse(BaseModel):

@@ -11,7 +11,6 @@ import { PALETTE as C } from '../palette.js'
 const props = defineProps({
   bins: { type: Array, default: () => [] },
   groups: { type: Array, default: null },  // [{ label, color, bins }] — 있으면 겹쳐보기
-  recommendedWindow: { type: Object, default: null },  // { lower, upper, score } 추천 공정창
   xFeature: { type: String, default: '' },
   yTarget: { type: String, default: '' },
   spec: { type: Object, default: () => ({ lower: null, upper: null }) },
@@ -80,11 +79,6 @@ function singleOption() {
         name: 'y avg', type: 'line', yAxisIndex: 1, smooth: true, symbolSize: 6, z: 3,
         data: avgData, lineStyle: { color: C.avg, width: 2 }, itemStyle: { color: C.avg },
         markLine: { symbol: 'none', data: specLines() },
-        markArea: props.recommendedWindow ? {
-          silent: true, itemStyle: { color: 'rgba(0,158,115,0.10)' },
-          label: { show: true, position: 'insideTop', formatter: '추천 window', fontSize: 9, color: '#009E73' },
-          data: [[{ xAxis: props.recommendedWindow.lower }, { xAxis: props.recommendedWindow.upper }]],
-        } : undefined,
       },
     ],
   }
