@@ -85,7 +85,7 @@ th { background: var(--surface-2); color: var(--text-2); font-weight: 600; posit
 th[title] { cursor: help; text-decoration: underline dotted rgba(0,0,0,.25); text-underline-offset: 3px; }
 .ms { color: var(--text-2); }
 .cfv { font-weight: 600; color: var(--accent); background: var(--accent-weak); padding: 2px 9px; border-radius: 999px; }
-.grp { font-size: 9px; font-weight: 700; color: #fff; background: var(--accent); padding: 1px 6px; border-radius: 999px; margin-left: 6px; cursor: help; }
+.grp { font-size: 9px; font-weight: 700; color: var(--accent); background: #fff; border: 1px solid var(--accent); padding: 1px 6px; border-radius: 999px; margin-left: 6px; cursor: help; }
 tbody tr:last-child td { border-bottom: none; }
 tbody tr:hover { background: #f5f5f7; }
 .ratio { font-weight: 600; color: var(--accent); background: var(--accent-weak); padding: 2px 9px; border-radius: 999px; }

@@ -159,6 +159,14 @@ function onDraw() {
       : null,
   })
 }
+
+// 첫 실행 안내의 "기본값으로 바로 작성" — X/Y 미선택 시 첫 항목 자동 선택 후 작성
+function drawWithDefaults() {
+  if (!xFeatures.value.length && fx.value.length) xFeatures.value = [fx.value[0].name]
+  if (!yTargets.value.length && fy.value.length) yTargets.value = [fy.value[0]]
+  nextTick(() => { if (valid.value) onDraw() })
+}
+defineExpose({ drawWithDefaults })
 </script>
 
 <template>

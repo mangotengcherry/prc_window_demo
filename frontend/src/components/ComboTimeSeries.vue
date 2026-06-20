@@ -13,6 +13,7 @@ const props = defineProps({
   estimate: { type: Object, default: null }, // 단일: { points:[[iso,val]], fit_summary }
   showEstimate: { type: Boolean, default: false },
   groups: { type: Array, default: null },    // [{ label, color, target, feature }] — 있으면 겹쳐보기
+  selection: { type: Array, default: null }, // [startISO, endISO] linked-brushing 선택 구간(밴드로 표시)
   yTarget: { type: String, default: '' },
   xFeature: { type: String, default: '' },
   spec: { type: Object, default: () => ({ lower: null, upper: null }) },
@@ -49,9 +50,12 @@ function movingAverage(points) {
 }
 const tPts = (t) => (t?.observed_points || []).map((p) => [p.time, p.value])
 const fPts = (f) => f?.points || []
-// 단일 모드 이동평균은 target/feature에만 의존 → 별도 computed로 캐시(spec 입력·추정 토글 시 재계산 방지)
+// 이동평균은 target/feature에만 의존 → 별도 computed로 캐시(spec 입력·추정 토글 시 재계산 방지)
 const tMaSingle = computed(() => movingAverage(tPts(props.target)))
 const fMaSingle = computed(() => movingAverage(fPts(props.feature)))
+const groupMas = computed(() => (props.groups || []).map((g) => ({ t: movingAverage(tPts(g.target)), f: movingAverage(fPts(g.feature)) })))
+// 선택 구간 밴드 (linked brushing의 시각적 앵커 — brush가 사라져도 남음)
+const selBand = () => props.selection ? { silent: true, itemStyle: { color: 'rgba(79,70,229,0.07)' }, data: [[{ xAxis: props.selection[0] }, { xAxis: props.selection[1] }]] } : undefined
 
 // feature spec(user/DC) 수평선 — 라벨 흰 배경 칩으로 축 눈금과 겹쳐도 가독
 const hl = (v, color, label) => ({ yAxis: v, lineStyle: { color, type: 'dashed', width: 2 }, label: { formatter: label, fontSize: 9, color, position: 'start', backgroundColor: '#fff', padding: [1, 3], borderRadius: 2 } })
@@ -121,13 +125,13 @@ function singleOption() {
       data: ['target', 'target 추세', ...(estPts.length ? ['추정 y'] : []), 'feature', 'feature 추세'] },
     series: [
       { name: 'target', type: 'scatter', xAxisIndex: 0, yAxisIndex: 0, data: tp, symbolSize: 4,
-        itemStyle: { color: C.tsTarget }, markLine: { symbol: 'none', data: clMark(tcl, C.faint) } },
+        itemStyle: { color: C.tsTarget }, markLine: { symbol: 'none', data: clMark(tcl, C.faint) }, markArea: selBand() },
       { name: 'target 추세', type: 'line', xAxisIndex: 0, yAxisIndex: 0, data: tMaSingle.value,
         smooth: true, showSymbol: false, z: 5, lineStyle: { color: C.tsTargetMa, width: 3 }, itemStyle: { color: C.tsTargetMa } },
       { name: '추정 y', type: 'scatter', xAxisIndex: 0, yAxisIndex: 0, data: estPts, symbol: 'diamond', symbolSize: 7, z: 4,
         itemStyle: { color: 'transparent', borderColor: C.estimate, borderWidth: 1.5 } },
       { name: 'feature', type: 'scatter', xAxisIndex: 1, yAxisIndex: 1, data: fp, symbolSize: 4,
-        itemStyle: { color: C.tsFeature }, markLine: { symbol: 'none', data: featLines() } },
+        itemStyle: { color: C.tsFeature }, markLine: { symbol: 'none', data: featLines() }, markArea: selBand() },
       { name: 'feature 추세', type: 'line', xAxisIndex: 1, yAxisIndex: 1, data: fMaSingle.value,
         smooth: true, showSymbol: false, z: 5, lineStyle: { color: C.tsFeatureMa, width: 3 }, itemStyle: { color: C.tsFeatureMa } },
     ],
@@ -140,13 +144,15 @@ function multiOption() {
   groups.forEach((g, gi) => {
     const tp = tPts(g.target)
     const fp = fPts(g.feature)
-    // 같은 분할값의 4개 series는 동일 name → 범례에서 한 번에 토글
+    const ma = groupMas.value[gi] || { t: [], f: [] }  // 캐시된 이동평균(집계 무관 재계산 방지)
+    // 같은 분할값의 4개 series는 동일 name → 범례에서 한 번에 토글. 선택 밴드는 첫 그룹에만
     series.push(
-      { name: g.label, type: 'scatter', xAxisIndex: 0, yAxisIndex: 0, data: tp, symbolSize: 3, itemStyle: { color: g.color, opacity: 0.32 } },
-      { name: g.label, type: 'line', xAxisIndex: 0, yAxisIndex: 0, data: movingAverage(tp), smooth: true, showSymbol: false, z: 5, lineStyle: { color: g.color, width: 2.5 } },
+      { name: g.label, type: 'scatter', xAxisIndex: 0, yAxisIndex: 0, data: tp, symbolSize: 3, itemStyle: { color: g.color, opacity: 0.32 },
+        ...(gi === 0 ? { markArea: selBand() } : {}) },
+      { name: g.label, type: 'line', xAxisIndex: 0, yAxisIndex: 0, data: ma.t, smooth: true, showSymbol: false, z: 5, lineStyle: { color: g.color, width: 2.5 } },
       { name: g.label, type: 'scatter', xAxisIndex: 1, yAxisIndex: 1, data: fp, symbolSize: 3, itemStyle: { color: g.color, opacity: 0.32 },
-        ...(gi === 0 ? { markLine: { symbol: 'none', data: featLines() } } : {}) },
-      { name: g.label, type: 'line', xAxisIndex: 1, yAxisIndex: 1, data: movingAverage(fp), smooth: true, showSymbol: false, z: 5, lineStyle: { color: g.color, width: 2.5 } },
+        ...(gi === 0 ? { markLine: { symbol: 'none', data: featLines() }, markArea: selBand() } : {}) },
+      { name: g.label, type: 'line', xAxisIndex: 1, yAxisIndex: 1, data: ma.f, smooth: true, showSymbol: false, z: 5, lineStyle: { color: g.color, width: 2.5 } },
     )
   })
   return {

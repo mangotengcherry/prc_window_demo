@@ -13,6 +13,7 @@ import { queryId, shareUrl, condFromUrl } from './share.js'
 
 const columns = ref(null)
 const xFeatureOptions = ref([])
+const sidebarRef = ref(null)
 
 // 서버 소유 대용량 페이로드 → shallowRef (내부를 깊은 reactive로 만들지 않아 변환·읽기 비용 절감)
 const binned = shallowRef(null)
@@ -94,8 +95,18 @@ const statsByCombo = computed(() => {
 
 const sameCfv = (a, b) => (a ?? null) === (b ?? null)
 const isThin = (c, minN) => { const mx = c.bins.length ? Math.max(...c.bins.map((b) => b.wafer_count)) : 0; return c.bins.length > 0 && mx < minN }
-const tgtOf = (c, cfv) => timeseries.value.targets.find((s) => s.name === c.y_target && sameCfv(s.category_feature_value, cfv)) || null
-const ftrOf = (c, cfv) => timeseries.value.features.find((s) => s.name === c.x_feature && sameCfv(s.category_feature_value, cfv)) || null
+// 시계열 series를 (name|cfv) 키 맵으로 1회 인덱싱 → 조합별 O(1) 매칭(이전 O(combos×series) find)
+const seriesIndex = computed(() => {
+  const tm = {}, fm = {}
+  const ts = timeseries.value
+  if (ts) {
+    ts.targets.forEach((s) => { tm[`${s.name}|${s.category_feature_value ?? ''}`] = s })
+    ts.features.forEach((s) => { fm[`${s.name}|${s.category_feature_value ?? ''}`] = s })
+  }
+  return { tm, fm }
+})
+const tgtOf = (c, cfv) => seriesIndex.value.tm[`${c.y_target}|${cfv ?? ''}`] || null
+const ftrOf = (c, cfv) => seriesIndex.value.fm[`${c.x_feature}|${cfv ?? ''}`] || null
 
 const rows = computed(() => {
   if (!binned.value || !timeseries.value) return []
@@ -229,7 +240,7 @@ async function copyShare() {
 
 <template>
   <div class="layout">
-    <Sidebar :columns="columns" :x-feature-options="xFeatureOptions" :loading="status === 'loading'"
+    <Sidebar ref="sidebarRef" :columns="columns" :x-feature-options="xFeatureOptions" :loading="status === 'loading'"
              :initial="initialCond" @xopts-change="onXoptsChange" @draw="onDraw" />
 
     <main class="main">
@@ -261,7 +272,17 @@ async function copyShare() {
       <p v-if="status === 'error'" class="banner err">⚠ {{ errorMsg }}</p>
       <p v-else-if="status === 'loading'" class="banner">불러오는 중…</p>
       <p v-else-if="status === 'empty'" class="banner">조건에 해당하는 데이터가 없습니다. (기간/관측 여부를 확인하세요)</p>
-      <p v-else-if="status === 'initial'" class="banner">왼쪽에서 분석 조건을 선택하고 "차트 작성"을 누르세요.</p>
+      <div v-else-if="status === 'initial'" class="hero">
+        <h2>FAB feature × EDS target 공정 윈도우 분석</h2>
+        <p>조합별 <b>Window</b>(y vs x)·<b>시계열</b>·<b>Cpk/Ppk</b>, <b>교호작용</b>(scatter·heatmap), <b>추정 y</b>, 기간 <b>brush 재집계</b>를 한 화면에서.</p>
+        <ol>
+          <li><b>조건·기간</b> 확인 — 기본값이 채워져 있습니다</li>
+          <li><b>X feature</b> · <b>Y target</b> 선택 (합산 그룹 · 값별 분할 옵션)</li>
+          <li><b>차트 작성</b></li>
+        </ol>
+        <button class="hero-btn" @click="sidebarRef?.drawWithDefaults()">기본값으로 바로 작성 ▶</button>
+        <p class="hero-sub">또는 왼쪽 패널에서 직접 조건을 고르세요.</p>
+      </div>
 
       <div v-if="selection" class="selbar">
         <span>⏱ 기간 선택 <b>{{ selLabel }}</b> · <span v-if="reaggregating" class="reagg">재집계 중…</span><span v-else>window·요약표가 이 구간 wafer로 재집계됨 (시계열은 전체)</span></span>
@@ -282,12 +303,13 @@ async function copyShare() {
       </section>
 
       <section class="rows">
-        <ComboRow v-for="r in rows" :key="r.key" :combo="r.combo"
+        <ComboRow v-for="(r, i) in rows" :key="r.key" :combo="r.combo"
                   :target="r.target" :feature="r.feature" :stats="r.stats"
                   :multi="r.multi" :members="r.members"
                   :estimate="r.estimate" :show-estimate="showEstimate"
                   :spec="specByCombo[r.key]" :dc-spec="r.dcSpec" :thin="r.thin"
-                  :min-n="columns?.min_n ?? 10" :sampled="timeseries?.sampled" @brush="onBrush" />
+                  :min-n="columns?.min_n ?? 10" :sampled="timeseries?.sampled"
+                  :first="i === 0" :selection="selection" @brush="onBrush" />
       </section>
 
       <section v-if="tableRows.length" class="table-area">
@@ -333,11 +355,19 @@ async function copyShare() {
 .selbar button { padding: 5px 12px; font-size: 12px; font-weight: 600; color: #fff; background: var(--accent); border: none; border-radius: 8px; cursor: pointer; white-space: nowrap; }
 .banner { margin: 10px 32px 0; font-size: 14px; color: var(--text-2); }
 .banner.err { color: #d70015; }
+.hero { margin: 24px 32px; max-width: 620px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow-sm); padding: 26px 28px; }
+.hero h2 { margin: 0 0 8px; font-size: 19px; font-weight: 600; letter-spacing: -0.01em; }
+.hero > p { margin: 0 0 14px; font-size: 13.5px; color: var(--text-2); line-height: 1.6; }
+.hero b { color: var(--text); font-weight: 600; }
+.hero ol { margin: 0 0 18px; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; color: var(--text); }
+.hero-btn { padding: 11px 20px; color: #fff; background: linear-gradient(135deg, var(--accent-2), var(--accent)); border: none; border-radius: 12px; font-size: 14px; font-weight: 600; cursor: pointer; box-shadow: 0 6px 16px rgba(79,70,229,.28); }
+.hero-sub { margin: 12px 0 0; font-size: 12px; color: var(--text-2); }
 .kpis { display: flex; gap: 12px; padding: 14px 32px 0; flex-wrap: wrap; }
-.kpi { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-sm); padding: 10px 16px; min-width: 96px; display: flex; flex-direction: column; gap: 2px; cursor: help; }
-.kpi.st-good { border-left-color: #16a34a; }
-.kpi.st-warn { border-left-color: #d97706; }
-.kpi.st-bad { border-left-color: #dc2626; }
+.kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-sm); padding: 10px 16px; min-width: 96px; display: flex; flex-direction: column; gap: 2px; cursor: help; }
+/* 상태 레일은 Cpk 카드에만(값이 있을 때) — 정보 카드엔 표시 안 함 */
+.kpi.st-good { border-left: 3px solid #16a34a; }
+.kpi.st-warn { border-left: 3px solid #d97706; }
+.kpi.st-bad { border-left: 3px solid #dc2626; }
 .kv { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; }
 .kv.good { color: #166534; } .kv.warn { color: #854d0e; } .kv.bad { color: #991b1b; } .kv.warnum { color: #854d0e; }
 .kl { font-size: 11px; color: var(--text-2); text-transform: uppercase; letter-spacing: .03em; }
