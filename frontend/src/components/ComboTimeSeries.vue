@@ -5,7 +5,7 @@
 import { computed } from 'vue'
 import VChart from 'vue-echarts'
 import '../echarts.js'
-import { PALETTE as C } from '../palette.js'
+import { PALETTE as C, HEAT_RAMP } from '../palette.js'
 
 const props = defineProps({
   target: { type: Object, default: null },   // 단일: { observed_points, control_limits, ... }
@@ -54,6 +54,30 @@ const fPts = (f) => f?.points || []
 const tMaSingle = computed(() => movingAverage(tPts(props.target)))
 const fMaSingle = computed(() => movingAverage(fPts(props.feature)))
 const groupMas = computed(() => (props.groups || []).map((g) => ({ t: movingAverage(tPts(g.target)), f: movingAverage(fPts(g.feature)) })))
+
+// scatter 점(=wafer 1매)에 식별자를 동행시켜 hover 툴팁으로 root_lot_id·wafer_id·tkout 제공.
+// 추세선/관리선 series는 raw 배열을 그대로 쓰고(위 tPts/fPts), scatter series만 객체 데이터로.
+const fmtT = (iso) => (iso ? String(iso).slice(0, 16).replace('T', ' ') : '')
+const idAt = (ids, i) => (ids && ids[i]) || []
+const enrich = (pts, ids, extra) => (pts || []).map((p, i) => ({ value: p, rlot: idAt(ids, i)[0], wid: idAt(ids, i)[1], ...(extra || {}) }))
+const tScatter = (t) => (t?.observed_points || []).map((p) => ({ value: [p.time, p.value], wid: p.wid, rlot: p.rlot, etko: p.observed_time }))
+const fScatter = (f) => enrich(f?.points, f?.point_ids)
+const eScatter = (e) => enrich(e?.points, e?.point_ids, { est: true })
+function tipFmt(p) {
+  const d = p.data
+  if (d && typeof d === 'object' && !Array.isArray(d) && d.wid != null) {  // 식별자 동행 scatter 점
+    const v = Array.isArray(d.value) ? d.value : [null, d.value]
+    let s = `<b>${d.wid}</b>`
+    if (d.rlot) s += ` <span style="color:#8a8a8a">· ${d.rlot}</span>`
+    if (d.est) s += ` <span style="color:#9a3a6b">(추정)</span>`
+    s += `<br/><span style="color:#8a8a8a">tkout</span> ${fmtT(v[0])}`
+    s += `<br/>${p.marker || ''}${p.seriesName}: <b>${v[1]}</b>`
+    if (d.etko) s += `<br/><span style="color:#8a8a8a">EDS확보</span> ${fmtT(d.etko)}`
+    return s
+  }
+  const v = Array.isArray(d) ? d[1] : (d && d.value)  // 추세선 등 [x,y]
+  return `${p.marker || ''}${p.seriesName}: <b>${v}</b>`
+}
 // 선택 구간 밴드 (linked brushing의 시각적 앵커 — brush가 사라져도 남음)
 const selBand = () => props.selection ? { silent: true, itemStyle: { color: 'rgba(79,70,229,0.07)' }, data: [[{ xAxis: props.selection[0] }, { xAxis: props.selection[1] }]] } : undefined
 
@@ -101,7 +125,7 @@ function featLines() {
 
 const baseLayout = {
   axisPointer: { link: [{ xAxisIndex: 'all' }] },
-  tooltip: { trigger: 'axis' },
+  tooltip: { trigger: 'item', confine: true, formatter: tipFmt },
   toolbox: { show: true, right: 6, top: -4, itemSize: 13,
     feature: { brush: { type: ['lineX', 'clear'], title: { lineX: '기간 선택', clear: '선택 해제' } } } },
   brush: { xAxisIndex: [0, 1], brushType: 'lineX', brushMode: 'single', removeOnClick: true,
@@ -148,11 +172,38 @@ const driftInfo = computed(() => {
   const d = props.feature?.drift
   return d && d.flagged ? d : null
 })
+// 추정 구간(미확보 gap) 평균 vs 관측(나머지) 구간 평균 비교 — 추정 토글 시(분리 모드)
+const meanCompare = computed(() => {
+  if (isMulti.value || !props.showEstimate) return null
+  const obs = props.target?.avg
+  const pts = props.estimate?.points
+  if (obs == null || !pts || !pts.length) return null
+  const pred = pts.reduce((s, p) => s + p[1], 0) / pts.length  // 추정 점(다이아몬드)들의 평균
+  const shift = props.estimate?.forecast?.shift ?? null
+  return { obs, pred, delta: +(pred - obs).toFixed(2), shift, up: pred >= obs }
+})
+// 두 구간 평균을 각 구간 위 수평 세그먼트로 그려 직접 비교 (관측: 좌측 회색 / 추정: gap영역, 높으면 빨강)
+function meanSegmentData() {
+  const mc = meanCompare.value
+  if (!mc) return []
+  const gs = gapStart.value, ge = gapEnd.value, x0 = xRange.value[0]
+  if (!gs || !ge || !x0) return []
+  const ms = (iso) => new Date(iso).getTime()
+  const grey = '#6b7280'
+  const hi = mc.up ? HEAT_RAMP[3] : grey  // 팀 컨벤션: 높으면 빨강, 낮으면 회색
+  const chip = (text, color, bold) => ({ show: true, position: 'middle', formatter: text, fontSize: 9,
+    fontWeight: bold ? 700 : 600, color, backgroundColor: '#fff', padding: [1, 3], borderRadius: 2 })
+  const d = (mc.delta >= 0 ? '+' : '') + mc.delta
+  return [
+    [{ coord: [ms(x0), mc.obs], lineStyle: { color: grey, type: 'dashed', width: 1.5 },
+       label: chip(`관측 평균 ${mc.obs.toFixed(1)}`, grey, false) }, { coord: [ms(gs), mc.obs] }],
+    [{ coord: [ms(gs), mc.pred], lineStyle: { color: hi, type: 'solid', width: 2.5 },
+       label: chip(`추정 평균 ${mc.pred.toFixed(1)} (${d})`, hi, true) }, { coord: [ms(ge), mc.pred] }],
+  ]
+}
 
 function singleOption() {
-  const tp = tPts(props.target)
-  const fp = fPts(props.feature)
-  const estPts = (props.showEstimate && props.estimate?.points?.length) ? props.estimate.points : []
+  const estPts = (props.showEstimate && props.estimate?.points?.length) ? eScatter(props.estimate) : []
   const tcl = props.target?.control_limits
   const clMark = (cl, color) => {
     if (!cl) return []
@@ -166,13 +217,13 @@ function singleOption() {
     legend: { top: 2, left: 'center', itemWidth: 14, itemHeight: 8, itemGap: 12, textStyle: { fontSize: 10 },
       data: ['target', 'target 추세', ...(estPts.length ? ['추정 y'] : []), 'feature', 'feature 추세'] },
     series: [
-      { name: 'target', type: 'scatter', xAxisIndex: 0, yAxisIndex: 0, data: tp, symbolSize: 4,
-        itemStyle: { color: C.tsTarget }, markLine: { symbol: 'none', data: clMark(tcl, C.faint) }, markArea: targetMarkArea() },
+      { name: 'target', type: 'scatter', xAxisIndex: 0, yAxisIndex: 0, data: tScatter(props.target), symbolSize: 4,
+        itemStyle: { color: C.tsTarget }, markLine: { symbol: 'none', data: [...clMark(tcl, C.faint), ...meanSegmentData()] }, markArea: targetMarkArea() },
       { name: 'target 추세', type: 'line', xAxisIndex: 0, yAxisIndex: 0, data: tMaSingle.value,
         smooth: true, showSymbol: false, z: 5, lineStyle: { color: C.tsTargetMa, width: 3 }, itemStyle: { color: C.tsTargetMa } },
       { name: '추정 y', type: 'scatter', xAxisIndex: 0, yAxisIndex: 0, data: estPts, symbol: 'diamond', symbolSize: 7, z: 4,
         itemStyle: { color: 'transparent', borderColor: C.estimate, borderWidth: 1.5 } },
-      { name: 'feature', type: 'scatter', xAxisIndex: 1, yAxisIndex: 1, data: fp, symbolSize: 4,
+      { name: 'feature', type: 'scatter', xAxisIndex: 1, yAxisIndex: 1, data: fScatter(props.feature), symbolSize: 4,
         itemStyle: { color: C.tsFeature }, markLine: { symbol: 'none', data: featLines() }, markArea: selBand() },
       { name: 'feature 추세', type: 'line', xAxisIndex: 1, yAxisIndex: 1, data: fMaSingle.value,
         smooth: true, showSymbol: false, z: 5, lineStyle: { color: C.tsFeatureMa, width: 3 }, itemStyle: { color: C.tsFeatureMa } },
@@ -184,15 +235,13 @@ function multiOption() {
   const groups = props.groups
   const series = []
   groups.forEach((g, gi) => {
-    const tp = tPts(g.target)
-    const fp = fPts(g.feature)
     const ma = groupMas.value[gi] || { t: [], f: [] }  // 캐시된 이동평균(집계 무관 재계산 방지)
     // 같은 분할값의 4개 series는 동일 name → 범례에서 한 번에 토글. 선택 밴드는 첫 그룹에만
     series.push(
-      { name: g.label, type: 'scatter', xAxisIndex: 0, yAxisIndex: 0, data: tp, symbolSize: 3, itemStyle: { color: g.color, opacity: 0.32 },
+      { name: g.label, type: 'scatter', xAxisIndex: 0, yAxisIndex: 0, data: tScatter(g.target), symbolSize: 3, itemStyle: { color: g.color, opacity: 0.32 },
         ...(gi === 0 ? { markArea: selBand() } : {}) },
       { name: g.label, type: 'line', xAxisIndex: 0, yAxisIndex: 0, data: ma.t, smooth: true, showSymbol: false, z: 5, lineStyle: { color: g.color, width: 2.5 } },
-      { name: g.label, type: 'scatter', xAxisIndex: 1, yAxisIndex: 1, data: fp, symbolSize: 3, itemStyle: { color: g.color, opacity: 0.32 },
+      { name: g.label, type: 'scatter', xAxisIndex: 1, yAxisIndex: 1, data: fScatter(g.feature), symbolSize: 3, itemStyle: { color: g.color, opacity: 0.32 },
         ...(gi === 0 ? { markLine: { symbol: 'none', data: featLines() }, markArea: selBand() } : {}) },
       { name: g.label, type: 'line', xAxisIndex: 1, yAxisIndex: 1, data: ma.f, smooth: true, showSymbol: false, z: 5, lineStyle: { color: g.color, width: 2.5 } },
     )

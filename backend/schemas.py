@@ -148,6 +148,8 @@ class TimePoint(BaseModel):
     value: float
     value_status: str  # observed | estimated
     observed_time: Optional[str] = None
+    wid: Optional[str] = None    # wafer_id (점 = wafer 1매, 툴팁용)
+    rlot: Optional[str] = None   # root_lot_id
 
 
 class TargetSeries(BaseModel):
@@ -168,6 +170,7 @@ class FeatureSeries(BaseModel):
     unit: str = ""
     category_feature_value: Optional[str] = None
     points: list  # [[iso, value], ...]
+    point_ids: list = []  # [[root_lot_id, wafer_id], ...] points와 동일 순서 (툴팁용)
     avg: Optional[float] = None
     control_limits: Optional[Dict[str, float]] = None
     drift: Optional[Dict[str, Any]] = None  # {shift, direction, flagged} — 추세 감지
@@ -179,6 +182,7 @@ class EstimateSeries(BaseModel):
     y_target: str
     category_feature_value: Optional[str] = None
     points: list  # [[iso, value], ...] — 미관측 wafer의 추정 y
+    point_ids: list = []  # [[root_lot_id, wafer_id], ...] points와 동일 순서 (툴팁용)
     fit_summary: Optional[Dict[str, Any]] = None  # {slope, intercept, r2, n}
     forecast: Optional[Dict[str, Any]] = None     # {oos, n, ucl, lcl} — 관리한계 초과 예측 수
 
@@ -291,6 +295,9 @@ class ScatterPoint(BaseModel):
     x: float
     y: float
     value: Optional[float] = None
+    wid: Optional[str] = None    # wafer_id (점 = wafer 1매, 툴팁용)
+    rlot: Optional[str] = None   # root_lot_id
+    t: Optional[str] = None      # fab_track_out_time(iso)
 
 
 class InteractionResponse(BaseModel):

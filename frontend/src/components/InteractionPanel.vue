@@ -122,9 +122,22 @@ const heat = computed(() => {
       y_bin_label: `${fmt(yE[yi])} – ${fmt(yE[yi + 1])}`, value: Math.round(v * 1e4) / 1e4, count: vs.length })
   }
   const rank = [...cells].sort((a, b2) => b2.value - a.value).slice(0, 50)
-    .map((c, i) => ({ rank: i + 1, x_bin_label: c.x_bin_label, y_bin_label: c.y_bin_label, aggregation: fmt(c.value), count: c.count }))
+    .map((c, i) => ({ rank: i + 1, x_bin: c.x_bin, y_bin: c.y_bin, x_bin_label: c.x_bin_label, y_bin_label: c.y_bin_label, aggregation: fmt(c.value), count: c.count }))
   return { cells, rank }
 })
+
+// ---- 순위 테이블 ↔ heatmap 강조 연동(같은 (x_bin,y_bin)) ----
+const hoverCell = ref(null)
+const rankBody = ref(null)
+const isHl = (r) => !!hoverCell.value && hoverCell.value.x_bin === r.x_bin && hoverCell.value.y_bin === r.y_bin
+function onRowHover(r) { hoverCell.value = r ? { x_bin: r.x_bin, y_bin: r.y_bin } : null }
+function onCellHover(c) {  // heatmap cell hover → 해당 순위 행 강조 + 화면에 보이게 스크롤
+  hoverCell.value = c
+  if (c && rankBody.value) {
+    const el = rankBody.value.querySelector(`[data-cell="${c.x_bin}-${c.y_bin}"]`)
+    if (el) el.scrollIntoView({ block: 'nearest' })
+  }
+}
 </script>
 
 <template>
@@ -164,7 +177,8 @@ const heat = computed(() => {
       <div class="cell">
         <div class="cap">Heatmap <small>{{ labelOf(valueField) }} ({{ aggregation === 'median' ? '중앙값' : '평균' }}){{ focus ? ' · 선택 영역' : '' }}</small></div>
         <InteractionHeatmap :cells="heat.cells" :x-bins="xBins" :y-bins="yBins"
-          :x-label="labelOf(xFeat)" :y-label="labelOf(yFeat)" :value-label="labelOf(valueField)" :min-count="minN" />
+          :x-label="labelOf(xFeat)" :y-label="labelOf(yFeat)" :value-label="labelOf(valueField)" :min-count="minN"
+          :highlight="hoverCell" @cellhover="onCellHover" />
       </div>
     </div>
 
@@ -173,8 +187,11 @@ const heat = computed(() => {
       <div class="rank-wrap">
         <table>
           <thead><tr><th>#</th><th>{{ labelOf(xFeat) }}</th><th>{{ labelOf(yFeat) }}</th><th>집계값</th><th>n</th></tr></thead>
-          <tbody>
-            <tr v-for="r in heat.rank" :key="r.rank" :class="{ thin: r.count < minN }" :title="r.count < minN ? `표본 ${r.count} < ${minN} — 신뢰도 낮음` : ''">
+          <tbody ref="rankBody">
+            <tr v-for="r in heat.rank" :key="r.rank" :data-cell="r.x_bin + '-' + r.y_bin"
+                :class="{ thin: r.count < minN, hl: isHl(r) }"
+                :title="r.count < minN ? `표본 ${r.count} < ${minN} — 신뢰도 낮음` : '이 행에 hover하면 heatmap에서 해당 셀이 강조됩니다'"
+                @mouseenter="onRowHover(r)" @mouseleave="onRowHover(null)">
               <td>{{ r.rank }}</td><td>{{ r.x_bin_label }}</td><td>{{ r.y_bin_label }}</td>
               <td class="num">{{ r.aggregation }}</td><td>{{ r.count }}</td>
             </tr>
@@ -215,6 +232,8 @@ td.num { font-weight: 700; }
 tbody tr:hover { background: #f5f5f7; }
 tr.thin { color: var(--text-2); }
 tr.thin td:first-child { box-shadow: inset 3px 0 0 #fbbf24; }
+tbody tr.hl td { background: var(--accent-weak); }
+tbody tr.hl td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .banner { margin: 4px 0; font-size: 13px; color: var(--text-2); }
 .banner.err { color: #d70015; }
 @media (max-width: 1100px) { .charts { grid-template-columns: 1fr; } }

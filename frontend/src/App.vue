@@ -6,7 +6,7 @@ import ComboRow from './components/ComboRow.vue'
 import DataTable from './components/DataTable.vue'
 // 보조 분석 패널(차트 3개) — 결과가 있을 때만 필요 → 지연 로드로 초기 번들·파싱 분리
 const InteractionPanel = defineAsyncComponent(() => import('./components/InteractionPanel.vue'))
-import { fetchColumns, fetchXFeatureOptions, fetchBinned, fetchTimeseries, fetchTable, fetchDrivers } from './api/client.js'
+import { fetchColumns, fetchXFeatureOptions, fetchBinned, fetchTimeseries, fetchTable, fetchDrivers, downloadRaw } from './api/client.js'
 import { cpk } from './stats.js'
 import { SERIES } from './palette.js'
 import { queryId, shareUrl, condFromUrl } from './share.js'
@@ -204,7 +204,7 @@ const capability = computed(() => {
   return Object.values(m).sort((a, b) => a.cpkDc - b.cpkDc)
 })
 
-// 인사이트 1: lag 기반 OOS 사전 예측 — 미확보 wafer 추정이 target 관리한계를 벗어날 예측 수 + 추정 평균 이동(σ)
+// 인사이트 1: lag 기반 관리이탈 사전 예측 — 미확보 wafer 추정이 target 관리한계를 벗어날 예측 수 + 추정 평균 이동(σ)
 const forecast = computed(() => {
   const ests = (timeseries.value?.estimates || []).filter((e) => e.forecast)
   if (!ests.length) return null
@@ -276,6 +276,21 @@ async function copyShare() {
     setTimeout(() => { copied.value = false }, 1500)
   } catch { /* clipboard 미지원/거부 시 무시 */ }
 }
+
+// 현재 분석 조건의 wafer 원시데이터 CSV 다운로드 (brush 선택 구간 반영)
+const downloading = ref(false)
+async function downloadCsv() {
+  if (!lastCond.value || downloading.value) return
+  downloading.value = true
+  try {
+    const cond = { ...lastCond.value, selection: selection.value ? { time_range: selection.value } : null }
+    await downloadRaw(cond)
+  } catch (e) {
+    errorMsg.value = e.message || 'CSV 다운로드 실패'
+  } finally {
+    downloading.value = false
+  }
+}
 </script>
 
 <template>
@@ -295,6 +310,7 @@ async function copyShare() {
           </label>
           <span v-if="showEstimate && isMultiMode" class="estnote" title="겹쳐보기(multi-line) 모드에서는 추정 y를 표시하지 않습니다. 분리 모드에서 확인하세요.">↳ 분리 모드에서 표시</span>
           <button v-if="lastCond" class="sharebtn" :title="'현재 분석 조건을 URL로 복사 (같은 링크로 재현)'" @click="copyShare">{{ copied ? '복사됨 ✓' : '🔗 공유' }}</button>
+          <button v-if="lastCond" class="sharebtn" :disabled="downloading" :title="'현재 조건의 wafer 원시데이터(raw)를 CSV로 다운로드. 식별자(root_lot_id·wafer_id)·선택 feature/target 포함'" @click="downloadCsv">{{ downloading ? '생성 중…' : '⬇ CSV' }}</button>
           <span class="badge" :class="status">{{ status }}</span>
           <span v-if="lastQueryAt" class="qt">조회 {{ lastQueryAt }}</span>
         </div>
@@ -341,7 +357,7 @@ async function copyShare() {
           <span class="kv" :class="{ warnum: kpis.thinN }">{{ kpis.thinN }}</span><span class="kl">표본 부족 조합</span></div>
         <div v-if="forecast" class="kpi" :class="forecast.oos > 0 ? 'st-bad' : (Math.abs(forecast.maxShift) >= 1 ? 'st-warn' : '')"
           :title="'lag 기반 사전예측: 미확보(최근 ~' + (columns?.lag_days ?? 60) + '일) wafer를 y~x 회귀로 추정 → target 관리한계(±3σ) 초과 예측 수.\n미확보 batch 추정 평균이 관측 평균 대비 ' + (forecast.maxShift >= 0 ? '+' : '') + forecast.maxShift + 'σ 이동(잠복 drift).\n신뢰도: 추정 R²=' + (forecast.r2 == null ? '-' : forecast.r2.toFixed(2))">
-          <span class="kv" :class="forecast.oos > 0 ? 'bad' : (Math.abs(forecast.maxShift) >= 1 ? 'warn' : '')">{{ forecast.oos }}<small class="shift" v-if="Math.abs(forecast.maxShift) >= 0.5">{{ forecast.maxShift >= 0 ? '+' : '' }}{{ forecast.maxShift }}σ</small></span><span class="kl">추정 OOS ⓘ</span></div>
+          <span class="kv" :class="forecast.oos > 0 ? 'bad' : (Math.abs(forecast.maxShift) >= 1 ? 'warn' : '')">{{ forecast.oos }}<small class="shift" v-if="Math.abs(forecast.maxShift) >= 0.5">{{ forecast.maxShift >= 0 ? '+' : '' }}{{ forecast.maxShift }}σ</small></span><span class="kl">관리이탈 예상 ⓘ</span></div>
       </section>
 
       <section v-if="status === 'loaded' && driversData.length" class="drivers-area">
@@ -424,6 +440,7 @@ async function copyShare() {
 .estnote { font-size: 10px; font-weight: 600; color: #92400e; background: #fef3c7; padding: 2px 7px; border-radius: 999px; cursor: help; }
 .sharebtn { font-size: 12px; font-weight: 600; color: var(--accent); background: #fff; border: 1px solid var(--accent); border-radius: 999px; padding: 4px 12px; cursor: pointer; }
 .sharebtn:hover { background: var(--accent-weak); }
+.sharebtn:disabled { opacity: .6; cursor: default; }
 .badge { font-size: 11px; font-weight: 600; padding: 4px 11px; border-radius: 999px; text-transform: uppercase; letter-spacing: .03em; background: #e5e7eb; color: #374151; }
 .badge.loaded { background: #dcfce7; color: #166534; }
 .badge.loading { background: #dbeafe; color: #1e40af; }

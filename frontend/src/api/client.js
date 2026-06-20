@@ -54,3 +54,20 @@ export function fetchInteraction(req) {
 export function fetchDrivers(cond) {
   return call(async () => (await api.post('/drivers', cond)).data)
 }
+
+// 현재 분석 조건의 wafer 원시데이터를 CSV blob으로 받아 브라우저 다운로드 트리거
+export function downloadRaw(cond) {
+  return call(async () => {
+    const res = await api.post('/raw', cond, { responseType: 'blob', timeout: 60000 })
+    const url = URL.createObjectURL(res.data)
+    const a = document.createElement('a')
+    a.href = url
+    const cd = res.headers['content-disposition'] || ''
+    const m = cd.match(/filename="?([^";]+)"?/)
+    a.download = m ? m[1] : 'raw_data.csv'
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  })
+}
