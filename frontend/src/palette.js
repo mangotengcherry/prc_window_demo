@@ -2,7 +2,7 @@
 // spec 선은 색 + dash + 라벨로 이중 인코딩하여 적록색약에서도 구분되게 한다.
 export const PALETTE = {
   specUser: '#D55E00', // vermillion — user spec
-  specDc: '#111111', //   black     — DC spec
+  specDc: '#3f3f46', //   zinc-700  — DC spec (순흑 대신 살짝 완화: pastel 데이터 위에서 과하지 않게)
   count: '#cfe3f5', //    window bar (wafer count)
   avg: '#0072B2', //      window y avg line (blue)
   ciFill: 'rgba(0, 114, 178, 0.16)', // 신뢰구간 band

@@ -21,9 +21,12 @@ const vals = computed(() => props.cells.map((c) => c.value).filter((v) => v != n
 function minmax(a) { let lo = Infinity, hi = -Infinity; for (const v of a) { if (v < lo) lo = v; if (v > hi) hi = v } return a.length ? [lo, hi] : [0, 1] }
 
 const option = computed(() => {
+  // 대부분 셀이 thin이면(희소 데이터) 디엠퍼시스가 무의미 → 색을 살림
+  const thinFrac = props.cells.length ? props.cells.filter((c) => c.count < props.minCount).length / props.cells.length : 0
+  const dimThin = thinFrac <= 0.6
   const data = props.cells.map((c) => ({
     value: [c.x_bin, c.y_bin, c.value], count: c.count, xl: c.x_bin_label, yl: c.y_bin_label,
-    itemStyle: c.count < props.minCount ? { opacity: 0.3 } : {},
+    itemStyle: (dimThin && c.count < props.minCount) ? { opacity: 0.4 } : {},
   }))
   const [vmin, vmax] = minmax(vals.value)
   return {
@@ -34,7 +37,7 @@ const option = computed(() => {
     visualMap: {
       type: 'continuous', min: vmin, max: vmax, calculable: true,
       orient: 'horizontal', left: 'center', top: 0, itemWidth: 11, itemHeight: 110, precision: 1,
-      text: ['높음', '낮음'], textStyle: { fontSize: 9 }, inRange: { color: ['#440154', '#21918c', '#fde725'] },
+      text: ['집계 높음', '낮음'], textStyle: { fontSize: 9 }, inRange: { color: ['#440154', '#21918c', '#fde725'] },
     },
     grid: { left: 64, right: 40, top: 32, bottom: 72 },
     xAxis: { type: 'category', data: xLabels.value, name: props.xLabel, nameLocation: 'middle', nameGap: 52,

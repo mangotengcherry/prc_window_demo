@@ -19,11 +19,12 @@ const emit = defineEmits(['toggle-exclude', 'exclude-region'])
 const hasValue = computed(() => props.points.some((p) => p.value != null))
 const activeData = computed(() => props.points.filter((p) => !props.excluded.has(p.i)).map((p) => [p.x, p.y, p.value, p.i]))
 const excludedData = computed(() => props.points.filter((p) => props.excluded.has(p.i)).map((p) => [p.x, p.y, p.value, p.i]))
-const vals = computed(() => activeData.value.map((d) => d[2]).filter((v) => v != null))
+// 색 스케일은 전체 점 기준으로 고정 → outlier 제외해도 남은 점들의 색이 출렁이지 않음
+const allVals = computed(() => props.points.map((p) => p.value).filter((v) => v != null))
 function minmax(a) { let lo = Infinity, hi = -Infinity; for (const v of a) { if (v < lo) lo = v; if (v > hi) hi = v } return a.length ? [lo, hi] : [0, 1] }
 
 const option = computed(() => {
-  const [vmin, vmax] = minmax(vals.value)
+  const [vmin, vmax] = minmax(allVals.value)
   return {
     tooltip: { trigger: 'item', formatter: (p) =>
       `${props.xLabel}: ${p.data[0]}<br/>${props.yLabel}: ${p.data[1]}` +
@@ -37,7 +38,7 @@ const option = computed(() => {
     visualMap: hasValue.value ? {
       type: 'continuous', dimension: 2, min: vmin, max: vmax, calculable: true, seriesIndex: 0,
       orient: 'horizontal', left: 'center', top: 0, itemWidth: 11, itemHeight: 100, precision: 1,
-      text: ['높음', '낮음'], textStyle: { fontSize: 9 }, inRange: { color: ['#440154', '#21918c', '#fde725'] },
+      text: ['원시 높음', '낮음'], textStyle: { fontSize: 9 }, inRange: { color: ['#440154', '#21918c', '#fde725'] },
     } : undefined,
     grid: { left: 52, right: 40, top: 34, bottom: 46 },
     xAxis: { type: 'value', scale: true, name: props.xLabel, nameLocation: 'middle', nameGap: 23, nameTextStyle: { fontSize: 10 } },

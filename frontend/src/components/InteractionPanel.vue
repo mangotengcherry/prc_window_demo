@@ -91,34 +91,42 @@ function edges(lo, hi, n) { if (hi <= lo) hi = lo + 1e-9; const out = []; for (l
 function binOf(v, lo, hi, n) { if (v < lo || v > hi) return -1; return Math.max(0, Math.min(n - 1, Math.floor((v - lo) / ((hi - lo) || 1e-9) * n))) }
 const fmt = (v) => Number(v.toPrecision(4))
 
-const heat = computed(() => {
+// 1단계: binning(점→버킷). 점/bin수/제외에만 의존 → 집계 토글 시 재버킷 안 함
+const buckets = computed(() => {
   const pts = activePoints.value
-  if (!pts.length) return { cells: [], rank: [] }
-  // 단일 패스 min/max (대량 점에서 Math.min(...arr) 스프레드 스택 위험 회피)
+  if (!pts.length) return null
   let xlo = Infinity, xhi = -Infinity, ylo = Infinity, yhi = -Infinity
-  for (const p of pts) {
+  for (const p of pts) {  // 단일 패스 min/max (스프레드 스택 위험 회피)
     if (p.x < xlo) xlo = p.x; if (p.x > xhi) xhi = p.x
     if (p.y < ylo) ylo = p.y; if (p.y > yhi) yhi = p.y
   }
   const xE = edges(xlo, xhi, xBins.value), yE = edges(ylo, yhi, yBins.value)
   const isCount = pts[0].value == null
-  const buckets = new Map()
+  const map = new Map()
   for (const p of pts) {
     const xi = binOf(p.x, xlo, xhi, xBins.value), yi = binOf(p.y, ylo, yhi, yBins.value)
     if (xi < 0 || yi < 0) continue
     const k = xi + ',' + yi
-    if (!buckets.has(k)) buckets.set(k, [])
-    buckets.get(k).push(isCount ? 1 : p.value)
+    if (!map.has(k)) map.set(k, [])
+    map.get(k).push(isCount ? 1 : p.value)
   }
+  return { map, xE, yE, isCount }
+})
+
+// 2단계: 버킷→cell 집계(평균/중앙값). 집계만 바뀌면 재버킷 없이 reduce만
+const heat = computed(() => {
+  const b = buckets.value
+  if (!b) return { cells: [], rank: [] }
+  const { map, xE, yE, isCount } = b
   const cells = []
-  for (const [k, vs] of buckets) {
+  for (const [k, vs] of map) {
     const [xi, yi] = k.split(',').map(Number)
-    const v = isCount ? vs.length : (aggregation.value === 'median' ? median(vs) : vs.reduce((a, b) => a + b, 0) / vs.length)
+    const v = isCount ? vs.length : (aggregation.value === 'median' ? median(vs) : vs.reduce((a, b2) => a + b2, 0) / vs.length)
     cells.push({ x_bin: xi, y_bin: yi, x_bin_label: `${fmt(xE[xi])} – ${fmt(xE[xi + 1])}`,
       y_bin_label: `${fmt(yE[yi])} – ${fmt(yE[yi + 1])}`, value: Math.round(v * 1e4) / 1e4, count: vs.length })
   }
-  const rank = [...cells].sort((a, b) => b.value - a.value).slice(0, 50)
-    .map((c, i) => ({ rank: i + 1, x_bin_label: c.x_bin_label, y_bin_label: c.y_bin_label, aggregation: c.value, count: c.count }))
+  const rank = [...cells].sort((a, b2) => b2.value - a.value).slice(0, 50)
+    .map((c, i) => ({ rank: i + 1, x_bin_label: c.x_bin_label, y_bin_label: c.y_bin_label, aggregation: fmt(c.value), count: c.count }))
   return { cells, rank }
 })
 </script>
@@ -142,7 +150,7 @@ const heat = computed(() => {
       </div>
       <label class="f sm">X bins<input type="number" min="2" max="40" v-model.number="xBins" /></label>
       <label class="f sm">Y bins<input type="number" min="2" max="40" v-model.number="yBins" /></label>
-      <div v-if="excludedCount" class="excl">제외 {{ excludedCount }}개<button @click="clearExcluded">초기화</button></div>
+      <div v-if="excludedCount" class="excl">제외 {{ excludedCount }}개 · 회색 점 클릭 = 복원<button @click="clearExcluded">초기화</button></div>
       <span v-else-if="points.length" class="exclhint" title="scatter에서 점을 클릭하거나 영역을 드래그(우상단 brush)하면 outlier를 제외하고 heatmap·순위가 다시 계산됩니다">💡 점 클릭·영역 드래그 = outlier 제외</span>
     </div>
 

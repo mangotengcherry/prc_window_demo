@@ -2,7 +2,7 @@
 // 한 조합의 한 행. 두 가지 모드:
 //  - 분리(split): (feature × target × 분할값) 단일 조합. spec은 이 조합 전용.
 //  - 겹쳐보기(multi): (feature × target) 한 행에 분할값들을 추세선으로 겹쳐 비교. spec은 공유.
-import { computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import WindowChart from './WindowChart.vue'
 import ComboTimeSeries from './ComboTimeSeries.vue'
 import { cpk, inSpecPct } from '../stats.js'
@@ -21,10 +21,25 @@ const props = defineProps({
   thin: { type: Boolean, default: false },        // 표본 부족(신뢰 낮음)
   minN: { type: Number, default: 10 },
   sampled: { type: Boolean, default: false },
+  first: { type: Boolean, default: false },        // 첫 행에만 안내 칩 표시(반복 노이즈 방지)
+  selection: { type: Array, default: null },       // linked-brushing 선택 구간 밴드
 })
 defineEmits(['brush'])
 
 const xName = props.combo.x_feature_display_name || props.combo.x_feature
+
+// user spec 입력: 로컬 ref + 디바운스(키 입력마다 차트 전체 option 재빌드 방지)
+const localLo = ref(props.spec?.lower ?? null)
+const localUp = ref(props.spec?.upper ?? null)
+watch(() => [props.spec?.lower, props.spec?.upper], ([l, u]) => { localLo.value = l ?? null; localUp.value = u ?? null })
+let specT = null
+watch([localLo, localUp], ([l, u]) => {
+  clearTimeout(specT)
+  specT = setTimeout(() => {
+    props.spec.lower = (l === '' || l == null) ? null : l
+    props.spec.upper = (u === '' || u == null) ? null : u
+  }, 250)
+})
 
 // 분리 모드 capability — Cpk(단기 σ) / Ppk(전체 σ), DC spec / user spec 기준
 const hasUser = computed(() => props.spec?.lower != null && props.spec?.upper != null)
@@ -66,8 +81,8 @@ const ck = (v) => (v == null ? '' : (v < 1 ? 'bad' : (v < 1.33 ? 'warn' : 'good'
       </span>
       <span class="spec">
         <span class="lbl">user spec</span>
-        <label>lower <input type="number" v-model.number="spec.lower" /></label>
-        <label>upper <input type="number" v-model.number="spec.upper" /></label>
+        <label>lower <input type="number" v-model.number="localLo" /></label>
+        <label>upper <input type="number" v-model.number="localUp" /></label>
       </span>
     </div>
 
@@ -103,13 +118,13 @@ const ck = (v) => (v == null ? '' : (v < 1 ? 'bad' : (v < 1.33 ? 'warn' : 'good'
         <WindowChart v-else :groups="windowGroups" :x-feature="xName" :y-target="combo.y_target" :spec="spec" :dc-spec="dcSpec" :min-n="minN" />
       </div>
       <div class="cell">
-        <div class="cap">시계열 (trackout_time) <span class="hint" title="차트 우상단 brush 도구로 기간을 드래그하면 window·요약표가 그 구간 wafer로 재집계됩니다">⛶ 기간 드래그 → 재집계</span></div>
+        <div class="cap">시계열 (trackout_time) <span v-if="first" class="hint" title="차트 우상단 brush 도구로 기간을 드래그하면 window·요약표가 그 구간 wafer로 재집계됩니다">⛶ 기간 드래그 → 재집계</span></div>
         <ComboTimeSeries v-if="!multi"
           :target="target" :feature="feature" :estimate="estimate" :show-estimate="showEstimate"
-          :y-target="combo.y_target" :x-feature="xName" :spec="spec" :dc-spec="dcSpec" :sampled="sampled"
+          :y-target="combo.y_target" :x-feature="xName" :spec="spec" :dc-spec="dcSpec" :sampled="sampled" :selection="selection"
           @brush="$emit('brush', $event)" />
         <ComboTimeSeries v-else
-          :groups="tsGroups"
+          :groups="tsGroups" :selection="selection"
           :y-target="combo.y_target" :x-feature="xName" :spec="spec" :dc-spec="dcSpec" :sampled="sampled"
           @brush="$emit('brush', $event)" />
       </div>
@@ -129,7 +144,7 @@ const ck = (v) => (v == null ? '' : (v < 1 ? 'bad' : (v < 1.33 ? 'warn' : 'good'
 .cap-strip b.good { color: #166534; } .cap-strip b.warn { color: #854d0e; } .cap-strip b.bad { color: #991b1b; }
 .cap-strip .cg { font-weight: 700; color: var(--text); text-transform: uppercase; font-size: 10px; letter-spacing: .04em; cursor: help; }
 .cap-strip .div { color: var(--border); }
-.cap-strip .hint { color: #aaa; }
+.cap-strip .hint { color: var(--text-2); }
 .mcap { display: inline-flex; align-items: center; gap: 5px; }
 .mcap .sw { width: 9px; height: 9px; border-radius: 3px; display: inline-block; }
 .header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
