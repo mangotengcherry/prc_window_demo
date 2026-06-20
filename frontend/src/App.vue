@@ -179,6 +179,17 @@ const kpis = computed(() => {
 })
 function cpkClass(v) { return v == null ? '' : (v < 1 ? 'bad' : (v < 1.33 ? 'warn' : 'good')) }
 
+// 인사이트 3: 공정능력(Cpk) 요약 — feature가 DC spec 대비 안정적인지(약한 순). Cpk(DC)는 feature 단위.
+const capability = computed(() => {
+  const m = {}
+  tableRows.value.forEach((r) => {
+    const c = cpk(r.x_value, r.x_std_within, r.dc_lower, r.dc_upper)
+    if (c == null) return
+    if (!m[r.x_feature] || (r.n || 0) > m[r.x_feature].n) m[r.x_feature] = { feature: r.x_feature, name: r.x_feature_display_name || r.x_feature, cpkDc: c, n: r.n }
+  })
+  return Object.values(m).sort((a, b) => a.cpkDc - b.cpkDc)
+})
+
 // 인사이트 1: lag 기반 OOS 사전 예측 — 미확보 wafer 추정이 target 관리한계를 벗어날 예측 수 + 추정 평균 이동(σ)
 const forecast = computed(() => {
   const ests = (timeseries.value?.estimates || []).filter((e) => e.forecast)
@@ -334,6 +345,17 @@ async function copyShare() {
         </div>
       </section>
 
+      <section v-if="status === 'loaded' && capability.length" class="drivers-area">
+        <h3 class="pane-title">공정능력(Cpk) 요약 <small>feature가 DC spec 대비 얼마나 안정적인지 — 약한 순 (Cpk&lt;1 위험)</small></h3>
+        <div class="capgrid">
+          <div v-for="c in capability" :key="c.feature" class="caprow" :title="c.name + ' · Cpk(DC) ' + c.cpkDc.toFixed(2) + ' · n=' + c.n">
+            <span class="dname">{{ c.name }}</span>
+            <div class="dbar"><div class="cfill" :class="cpkClass(c.cpkDc)" :style="{ width: Math.min(100, c.cpkDc / 2 * 100) + '%' }"></div></div>
+            <span class="cpkv" :class="cpkClass(c.cpkDc)">{{ c.cpkDc.toFixed(2) }}</span>
+          </div>
+        </div>
+      </section>
+
       <section class="rows">
         <ComboRow v-for="(r, i) in rows" :key="r.key" :combo="r.combo"
                   :target="r.target" :feature="r.feature" :stats="r.stats"
@@ -417,6 +439,12 @@ async function copyShare() {
 .dval { font-size: 11px; font-weight: 700; color: var(--accent); text-align: right; }
 .dval.neg { color: #b45309; }
 .dnone { font-size: 11px; color: var(--text-2); margin: 4px 0 0; }
+.capgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 6px 18px; }
+.caprow { display: grid; grid-template-columns: 130px 1fr 40px; align-items: center; gap: 8px; cursor: help; }
+.cfill { height: 100%; border-radius: 999px; }
+.cfill.good { background: #16a34a; } .cfill.warn { background: #d97706; } .cfill.bad { background: #dc2626; }
+.cpkv { font-size: 11px; font-weight: 700; text-align: right; }
+.cpkv.good { color: #166534; } .cpkv.warn { color: #854d0e; } .cpkv.bad { color: #991b1b; }
 .rows { display: flex; flex-direction: column; gap: 16px; padding: 16px 32px; }
 .table-area { padding: 4px 32px 36px; display: flex; flex-direction: column; gap: 10px; }
 .ix-area { padding: 0 32px 40px; }
