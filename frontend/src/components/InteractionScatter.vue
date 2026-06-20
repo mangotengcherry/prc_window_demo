@@ -20,10 +20,10 @@ const hasValue = computed(() => props.points.some((p) => p.value != null))
 const activeData = computed(() => props.points.filter((p) => !props.excluded.has(p.i)).map((p) => [p.x, p.y, p.value, p.i]))
 const excludedData = computed(() => props.points.filter((p) => props.excluded.has(p.i)).map((p) => [p.x, p.y, p.value, p.i]))
 const vals = computed(() => activeData.value.map((d) => d[2]).filter((v) => v != null))
+function minmax(a) { let lo = Infinity, hi = -Infinity; for (const v of a) { if (v < lo) lo = v; if (v > hi) hi = v } return a.length ? [lo, hi] : [0, 1] }
 
 const option = computed(() => {
-  const vmin = vals.value.length ? Math.min(...vals.value) : 0
-  const vmax = vals.value.length ? Math.max(...vals.value) : 1
+  const [vmin, vmax] = minmax(vals.value)
   return {
     tooltip: { trigger: 'item', formatter: (p) =>
       `${props.xLabel}: ${p.data[0]}<br/>${props.yLabel}: ${p.data[1]}` +

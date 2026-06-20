@@ -31,24 +31,30 @@ function onBrushEnd(params) {
   emit('brush', [new Date(cr[0]).toISOString(), new Date(cr[1]).toISOString()])
 }
 
+// 중심 이동평균 — 슬라이딩 합으로 O(n) (이전 O(n·win))
 function movingAverage(points) {
   const n = points.length
   if (!n) return []
-  const win = Math.max(5, Math.round(n / 15))
-  const half = Math.floor(win / 2)
-  const out = []
+  const half = Math.floor(Math.max(5, Math.round(n / 15)) / 2)
+  const out = new Array(n)
+  let sum = 0, lo = 0, hi = -1
   for (let i = 0; i < n; i++) {
-    let sum = 0, cnt = 0
-    for (let j = Math.max(0, i - half); j <= Math.min(n - 1, i + half); j++) { sum += points[j][1]; cnt++ }
-    out.push([points[i][0], +(sum / cnt).toFixed(4)])
+    const want = Math.min(n - 1, i + half)
+    while (hi < want) { hi++; sum += points[hi][1] }
+    const newLo = Math.max(0, i - half)
+    while (lo < newLo) { sum -= points[lo][1]; lo++ }
+    out[i] = [points[i][0], +(sum / (hi - lo + 1)).toFixed(4)]
   }
   return out
 }
 const tPts = (t) => (t?.observed_points || []).map((p) => [p.time, p.value])
 const fPts = (f) => f?.points || []
+// 단일 모드 이동평균은 target/feature에만 의존 → 별도 computed로 캐시(spec 입력·추정 토글 시 재계산 방지)
+const tMaSingle = computed(() => movingAverage(tPts(props.target)))
+const fMaSingle = computed(() => movingAverage(fPts(props.feature)))
 
-// feature spec(user/DC) 수평선 — 라벨은 왼쪽(start)에 둬서 우측 y슬라이더와 겹치지 않게
-const hl = (v, color, label) => ({ yAxis: v, lineStyle: { color, type: 'dashed', width: 2 }, label: { formatter: label, fontSize: 9, color, position: 'start' } })
+// feature spec(user/DC) 수평선 — 라벨 흰 배경 칩으로 축 눈금과 겹쳐도 가독
+const hl = (v, color, label) => ({ yAxis: v, lineStyle: { color, type: 'dashed', width: 2 }, label: { formatter: label, fontSize: 9, color, position: 'start', backgroundColor: '#fff', padding: [1, 3], borderRadius: 2 } })
 function featLines() {
   const out = []
   if (props.spec.lower != null) out.push(hl(props.spec.lower, C.specUser, 'USL'))
@@ -103,25 +109,26 @@ function singleOption() {
   const tcl = props.target?.control_limits
   const clMark = (cl, color) => {
     if (!cl) return []
+    const lbl = (t) => ({ formatter: t, fontSize: 9, color, position: 'start', backgroundColor: '#fff', padding: [1, 3], borderRadius: 2 })
     return [
-      { yAxis: cl.ucl, lineStyle: { color, type: 'dashed', width: 1, opacity: 0.7 }, label: { formatter: 'UCL', fontSize: 9, color, position: 'start' } },
-      { yAxis: cl.lcl, lineStyle: { color, type: 'dashed', width: 1, opacity: 0.7 }, label: { formatter: 'LCL', fontSize: 9, color, position: 'start' } },
+      { yAxis: cl.ucl, lineStyle: { color, type: 'dashed', width: 1, opacity: 0.7 }, label: lbl('UCL') },
+      { yAxis: cl.lcl, lineStyle: { color, type: 'dashed', width: 1, opacity: 0.7 }, label: lbl('LCL') },
     ]
   }
   return {
     ...baseLayout, ...axes(),
-    legend: { top: 2, left: 'center', itemWidth: 14, itemHeight: 8, textStyle: { fontSize: 10 },
-      data: [`${props.yTarget}`, '이동평균(target)', ...(estPts.length ? ['추정 y'] : []), `${props.xFeature}`, '이동평균(feature)'] },
+    legend: { top: 2, left: 'center', itemWidth: 14, itemHeight: 8, itemGap: 12, textStyle: { fontSize: 10 },
+      data: ['target', 'target 추세', ...(estPts.length ? ['추정 y'] : []), 'feature', 'feature 추세'] },
     series: [
-      { name: `${props.yTarget}`, type: 'scatter', xAxisIndex: 0, yAxisIndex: 0, data: tp, symbolSize: 4,
+      { name: 'target', type: 'scatter', xAxisIndex: 0, yAxisIndex: 0, data: tp, symbolSize: 4,
         itemStyle: { color: C.tsTarget }, markLine: { symbol: 'none', data: clMark(tcl, C.faint) } },
-      { name: '이동평균(target)', type: 'line', xAxisIndex: 0, yAxisIndex: 0, data: movingAverage(tp),
+      { name: 'target 추세', type: 'line', xAxisIndex: 0, yAxisIndex: 0, data: tMaSingle.value,
         smooth: true, showSymbol: false, z: 5, lineStyle: { color: C.tsTargetMa, width: 3 }, itemStyle: { color: C.tsTargetMa } },
       { name: '추정 y', type: 'scatter', xAxisIndex: 0, yAxisIndex: 0, data: estPts, symbol: 'diamond', symbolSize: 7, z: 4,
         itemStyle: { color: 'transparent', borderColor: C.estimate, borderWidth: 1.5 } },
-      { name: `${props.xFeature}`, type: 'scatter', xAxisIndex: 1, yAxisIndex: 1, data: fp, symbolSize: 4,
+      { name: 'feature', type: 'scatter', xAxisIndex: 1, yAxisIndex: 1, data: fp, symbolSize: 4,
         itemStyle: { color: C.tsFeature }, markLine: { symbol: 'none', data: featLines() } },
-      { name: '이동평균(feature)', type: 'line', xAxisIndex: 1, yAxisIndex: 1, data: movingAverage(fp),
+      { name: 'feature 추세', type: 'line', xAxisIndex: 1, yAxisIndex: 1, data: fMaSingle.value,
         smooth: true, showSymbol: false, z: 5, lineStyle: { color: C.tsFeatureMa, width: 3 }, itemStyle: { color: C.tsFeatureMa } },
     ],
   }

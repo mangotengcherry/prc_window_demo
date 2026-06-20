@@ -18,14 +18,14 @@ const props = defineProps({
 const xLabels = computed(() => { const a = Array(props.xBins).fill(''); props.cells.forEach((c) => { a[c.x_bin] = c.x_bin_label }); return a })
 const yLabels = computed(() => { const a = Array(props.yBins).fill(''); props.cells.forEach((c) => { a[c.y_bin] = c.y_bin_label }); return a })
 const vals = computed(() => props.cells.map((c) => c.value).filter((v) => v != null))
+function minmax(a) { let lo = Infinity, hi = -Infinity; for (const v of a) { if (v < lo) lo = v; if (v > hi) hi = v } return a.length ? [lo, hi] : [0, 1] }
 
 const option = computed(() => {
   const data = props.cells.map((c) => ({
     value: [c.x_bin, c.y_bin, c.value], count: c.count, xl: c.x_bin_label, yl: c.y_bin_label,
     itemStyle: c.count < props.minCount ? { opacity: 0.3 } : {},
   }))
-  const vmin = vals.value.length ? Math.min(...vals.value) : 0
-  const vmax = vals.value.length ? Math.max(...vals.value) : 1
+  const [vmin, vmax] = minmax(vals.value)
   return {
     tooltip: { position: 'top', formatter: (p) =>
       `${props.xLabel}: ${p.data.xl}<br/>${props.yLabel}: ${p.data.yl}` +

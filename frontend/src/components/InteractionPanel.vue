@@ -2,7 +2,7 @@
 // 교호작용 분석: 차트 작성에 쓰인 X features/Y target 중 2개를 x/y축으로,
 // value_field를 집계해 scatter + heatmap + rank로 분석.
 // scatter 점만 서버에서 받고, binning/집계/제외(outlier)는 프론트에서 즉시 계산(서버 재요청 없이 인터랙션).
-import { ref, computed, watch } from 'vue'
+import { ref, shallowRef, computed, watch } from 'vue'
 import InteractionScatter from './InteractionScatter.vue'
 import InteractionHeatmap from './InteractionHeatmap.vue'
 import { fetchInteraction } from '../api/client.js'
@@ -31,7 +31,7 @@ const xBins = ref(10)
 const yBins = ref(10)
 const excluded = ref(new Set())  // 제외된 점 index
 
-const result = ref(null)
+const result = shallowRef(null)  // 서버 점 배열 → 깊은 reactive 불필요
 const loading = ref(false)
 const error = ref('')
 let lastSig = ''
@@ -94,8 +94,12 @@ const fmt = (v) => Number(v.toPrecision(4))
 const heat = computed(() => {
   const pts = activePoints.value
   if (!pts.length) return { cells: [], rank: [] }
-  const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y)
-  const xlo = Math.min(...xs), xhi = Math.max(...xs), ylo = Math.min(...ys), yhi = Math.max(...ys)
+  // 단일 패스 min/max (대량 점에서 Math.min(...arr) 스프레드 스택 위험 회피)
+  let xlo = Infinity, xhi = -Infinity, ylo = Infinity, yhi = -Infinity
+  for (const p of pts) {
+    if (p.x < xlo) xlo = p.x; if (p.x > xhi) xhi = p.x
+    if (p.y < ylo) ylo = p.y; if (p.y > yhi) yhi = p.y
+  }
   const xE = edges(xlo, xhi, xBins.value), yE = edges(ylo, yhi, yBins.value)
   const isCount = pts[0].value == null
   const buckets = new Map()
@@ -139,6 +143,7 @@ const heat = computed(() => {
       <label class="f sm">X bins<input type="number" min="2" max="40" v-model.number="xBins" /></label>
       <label class="f sm">Y bins<input type="number" min="2" max="40" v-model.number="yBins" /></label>
       <div v-if="excludedCount" class="excl">제외 {{ excludedCount }}개<button @click="clearExcluded">초기화</button></div>
+      <span v-else-if="points.length" class="exclhint" title="scatter에서 점을 클릭하거나 영역을 드래그(우상단 brush)하면 outlier를 제외하고 heatmap·순위가 다시 계산됩니다">💡 점 클릭·영역 드래그 = outlier 제외</span>
     </div>
 
     <p v-if="error" class="banner err">⚠ {{ error }}</p>
@@ -165,9 +170,9 @@ const heat = computed(() => {
         <table>
           <thead><tr><th>#</th><th>{{ labelOf(xFeat) }}</th><th>{{ labelOf(yFeat) }}</th><th>집계값</th><th>n</th></tr></thead>
           <tbody>
-            <tr v-for="r in heat.rank" :key="r.rank" :class="{ thin: r.count < minN }">
+            <tr v-for="r in heat.rank" :key="r.rank" :class="{ thin: r.count < minN }" :title="r.count < minN ? `표본 ${r.count} < ${minN} — 신뢰도 낮음(thin)` : ''">
               <td>{{ r.rank }}</td><td>{{ r.x_bin_label }}</td><td>{{ r.y_bin_label }}</td>
-              <td class="num">{{ r.aggregation }}</td><td>{{ r.count }}<span v-if="r.count < minN" class="tn">thin</span></td>
+              <td class="num">{{ r.aggregation }}</td><td>{{ r.count }}</td>
             </tr>
           </tbody>
         </table>
@@ -192,6 +197,7 @@ const heat = computed(() => {
 .seg button.on { background: var(--accent-weak); color: var(--accent); }
 .excl { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; color: #9a3412; background: #ffedd5; border: 1px solid #fdba74; border-radius: 8px; padding: 5px 10px; }
 .excl button { font-size: 11px; font-weight: 600; color: #fff; background: #ea580c; border: none; border-radius: 6px; padding: 3px 9px; cursor: pointer; }
+.exclhint { align-self: center; font-size: 11px; font-weight: 600; color: var(--accent); background: var(--accent-weak); border-radius: 8px; padding: 5px 10px; cursor: help; }
 .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 .cell { min-width: 0; }
 .cap { font-size: 11px; color: var(--text-2); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
@@ -203,7 +209,7 @@ th { background: var(--surface-2); color: var(--text-2); font-weight: 600; posit
 td.num { font-weight: 700; }
 tbody tr:hover { background: #f5f5f7; }
 tr.thin { color: var(--text-2); }
-.tn { font-size: 9px; font-weight: 700; color: #92400e; background: #fde68a; padding: 0 5px; border-radius: 999px; margin-left: 6px; }
+tr.thin td:first-child { box-shadow: inset 3px 0 0 #fbbf24; }
 .banner { margin: 4px 0; font-size: 13px; color: var(--text-2); }
 .banner.err { color: #d70015; }
 @media (max-width: 1100px) { .charts { grid-template-columns: 1fr; } }
