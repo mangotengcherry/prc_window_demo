@@ -266,7 +266,6 @@ async function copyShare() {
         <span><b>y확보 · eds</b> {{ provenance.edsRange }}</span>
         <span><b>표본</b> {{ provenance.n }}</span>
         <span><b>쿼리</b> {{ provenance.qid }}</span>
-        <span v-if="provenance.lagDays" class="lag" :title="`EDS lag ${provenance.lagDays}일 — 최근 ${provenance.lagDays}일 wafer는 미관측이라 window/Cpk 집계에서 빠집니다`">⚠ window는 ~{{ provenance.lagDays }}일 이전 기준</span>
       </div>
 
       <p v-if="status === 'error'" class="banner err">⚠ {{ errorMsg }}</p>
