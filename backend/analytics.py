@@ -333,6 +333,37 @@ def compute_table(req) -> dict:
     return {"rows": rows}
 
 
+# ---------------- /api/drivers (인사이트 2) ----------------
+def compute_drivers(req) -> dict:
+    """선택 target별로 같은 fab_step의 numeric feature를 |corr|(관측 wafer 기준)로 정렬."""
+    df = _with_target_groups(D.load_dataframe(), getattr(req, "y_target_groups", None))
+    base = _filter_rows(df, line_id=req.line_id, product=req.product,
+                        fab_step=req.fab_step, date_range=req.date_range)
+    base = _apply_target_date(base[base["observed"]], req.target_date_range)
+    prc = D.fab_metro_prc()
+    feats = prc[(prc["fab_step"] == req.fab_step) & (prc["data_type"] == "numeric")]
+
+    out = []
+    for yt in req.y_targets:
+        drivers = []
+        if yt in base.columns:
+            for _, fr in feats.iterrows():
+                key = fr["feature_key"]
+                if key not in base.columns:
+                    continue
+                s = base[base[key].notna() & base[yt].notna()]
+                if len(s) < 5:
+                    continue
+                c = np.corrcoef(s[key], s[yt])[0, 1]
+                if np.isnan(c):
+                    continue
+                drivers.append({"feature": key, "display_name": fr["display_name"],
+                                "corr": round(float(c), 3), "abs": round(abs(float(c)), 3), "n": int(len(s))})
+            drivers.sort(key=lambda d: -d["abs"])
+        out.append({"target": yt, "drivers": drivers})
+    return {"targets": out}
+
+
 # ---------------- /api/interaction ----------------
 SCATTER_CAP = 5000   # scatter 점수 캡. heatmap/rank·binning·범위·outlier 제외는
                      # 프론트가 이 점들로 즉시 계산(서버 재요청 없이 인터랙션 → 자원 효율)

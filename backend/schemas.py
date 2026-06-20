@@ -240,6 +240,36 @@ class TableResponse(BaseModel):
     rows: List[TableRow]
 
 
+# ---------- /api/drivers ----------  (인사이트 2: 영향 요인 랭킹)
+class DriversRequest(BaseModel):
+    line_id: str
+    product: str
+    category: str
+    eds_step: str
+    date_range: DateRange
+    target_date_range: Optional[DateRange] = None
+    fab_step: str
+    y_targets: List[str]
+    y_target_groups: List[TargetGroup] = []
+
+
+class DriverItem(BaseModel):
+    feature: str
+    display_name: str
+    corr: float      # 부호 포함 상관
+    abs: float       # |corr| (정렬 기준)
+    n: int
+
+
+class TargetDrivers(BaseModel):
+    target: str
+    drivers: List[DriverItem]
+
+
+class DriversResponse(BaseModel):
+    targets: List[TargetDrivers]
+
+
 # ---------- /api/interaction ----------
 # binning/aggregation/range/outlier 제외는 프론트가 scatter_points로 즉시 계산.
 class InteractionRequest(BaseModel):

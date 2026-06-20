@@ -9,6 +9,7 @@ import data as D
 from schemas import (
     BinnedRequest, BinnedResponse,
     ColumnsResponse,
+    DriversRequest, DriversResponse,
     InteractionRequest, InteractionResponse,
     TableRequest, TableResponse,
     TimeseriesRequest, TimeseriesResponse,
@@ -88,3 +89,8 @@ def post_table(req: TableRequest):
 @app.post("/api/interaction", response_model=InteractionResponse)
 def post_interaction(req: InteractionRequest):
     return analytics.compute_interaction(req)
+
+
+@app.post("/api/drivers", response_model=DriversResponse)
+def post_drivers(req: DriversRequest):
+    return analytics.compute_drivers(req)
