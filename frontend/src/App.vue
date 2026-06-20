@@ -277,8 +277,8 @@ async function copyShare() {
         <p>조합별 <b>Window</b>(y vs x)·<b>시계열</b>·<b>Cpk/Ppk</b>, <b>교호작용</b>(scatter·heatmap), <b>추정 y</b>, 기간 <b>brush 재집계</b>를 한 화면에서.</p>
         <ol>
           <li><b>조건·기간</b> 확인 — 기본값이 채워져 있습니다</li>
-          <li><b>X feature</b> · <b>Y target</b> 선택 (합산 그룹 · 값별 분할 옵션)</li>
-          <li><b>차트 작성</b></li>
+          <li><b>Y target · X feature</b> 선택 (합산 그룹 · 값별 분할 옵션)</li>
+          <li><b>차트 작성</b> → 각 행에서 <b>user spec</b>(lower/upper) 입력하면 Cpk 비교</li>
         </ol>
         <button class="hero-btn" @click="sidebarRef?.drawWithDefaults()">기본값으로 바로 작성 ▶</button>
         <p class="hero-sub">또는 왼쪽 패널에서 직접 조건을 고르세요.</p>
