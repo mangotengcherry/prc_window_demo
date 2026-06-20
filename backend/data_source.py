@@ -155,6 +155,11 @@ def fact_table() -> pd.DataFrame:
         for key in num_keys:
             c, sd = _center(key)
             feats[key] = float(rng.normal(c, sd))
+        # 최근 ~70일 driver feature에 상승 추세 부여 → 잠복 excursion(lag로 target 아직 미확보).
+        # 관측 구간엔 거의 안 보이고, 미확보(추정) 구간에서 target이 관리한계로 치닫는 시나리오.
+        days_ago = (_NOW - wafer_start).days
+        if driver_key and days_ago < 70:
+            feats[driver_key] += (70 - days_ago) * 0.5
         # 2) target — BIN은 driver feature에 약한 선형 의존 + 노이즈, 그 외는 무작위
         dep = 3.0 * (feats[driver_key] - driver_c) if driver_key else 0.0
         target_vals = {t: (float(500 + dep + rng.normal(0, 18)) if t.startswith("BIN")

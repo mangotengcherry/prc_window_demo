@@ -246,13 +246,26 @@ def compute_timeseries(req) -> dict:
                 "control_limits": _control_limits(obs[yt]) if len(obs) else None,
             })
             # 조합별 추정 y (미관측 wafer) — y~x 선형회귀
+            cl = _control_limits(obs[yt]) if len(obs) else None
             for xf in req.x_features:
                 if xf not in sub.columns:
                     continue
                 pts, fit = _fit_estimate(obs, sub, xf, yt)
                 if pts:
+                    # lag 기반 OOS 예측: 추정 y가 target 관리한계(±3σ)를 벗어나는 미확보 wafer 수
+                    # + 미확보 batch 추정 평균이 관측 평균 대비 몇 σ 이동했는지(잠복 drift 조기경보)
+                    forecast = None
+                    if cl:
+                        pv = [v for _, v in pts]
+                        oos = sum(1 for v in pv if v > cl["ucl"] or v < cl["lcl"])
+                        mean_pred = float(np.mean(pv))
+                        sig = cl.get("sigma") or 0
+                        shift = round((mean_pred - float(obs[yt].mean())) / sig, 2) if sig else 0.0
+                        forecast = {"oos": int(oos), "n": len(pts), "ucl": cl["ucl"], "lcl": cl["lcl"],
+                                    "shift": shift, "mean_pred": round(mean_pred, 2)}
                     estimates.append({"x_feature": xf, "y_target": yt,
-                                      "category_feature_value": cf_val, "points": pts, "fit_summary": fit})
+                                      "category_feature_value": cf_val, "points": pts,
+                                      "fit_summary": fit, "forecast": forecast})
         for xf in req.x_features:
             if xf not in sub.columns:
                 continue

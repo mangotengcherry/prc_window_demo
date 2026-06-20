@@ -179,6 +179,7 @@ class EstimateSeries(BaseModel):
     category_feature_value: Optional[str] = None
     points: list  # [[iso, value], ...] — 미관측 wafer의 추정 y
     fit_summary: Optional[Dict[str, Any]] = None  # {slope, intercept, r2, n}
+    forecast: Optional[Dict[str, Any]] = None     # {oos, n, ucl, lcl} — 관리한계 초과 예측 수
 
 
 class TimeseriesResponse(BaseModel):

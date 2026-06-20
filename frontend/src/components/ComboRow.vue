@@ -27,6 +27,9 @@ const props = defineProps({
 defineEmits(['brush'])
 
 const xName = props.combo.x_feature_display_name || props.combo.x_feature
+// 인사이트 1: 이 조합의 lag 기반 OOS 예측(미확보 wafer 추정이 관리한계 초과) + 추정 평균 이동
+const fc = computed(() => props.estimate?.forecast || null)
+const fcShow = computed(() => fc.value && (fc.value.oos > 0 || Math.abs(fc.value.shift) >= 0.5))
 
 // user spec 입력: 로컬 ref + 디바운스(키 입력마다 차트 전체 option 재빌드 방지)
 const localLo = ref(props.spec?.lower ?? null)
@@ -78,6 +81,9 @@ const ck = (v) => (v == null ? '' : (v < 1 ? 'bad' : (v < 1.33 ? 'warn' : 'good'
         <span v-if="multi" class="cf">· 겹쳐보기 {{ members.length }}</span>
         <span v-else-if="combo.category_feature_value" class="cf">· {{ combo.category_feature_value }}</span>
         <span v-if="thin" class="thin" title="bin당 표본수가 min_n보다 적어 평균이 불안정합니다">표본 부족</span>
+        <span v-if="fcShow" class="fc" :class="{ bad: fc.oos > 0 }"
+          :title="'lag 기반 사전예측 — 미확보 ' + fc.n + '장 중 ' + fc.oos + '장이 target 관리한계 초과 예측. 추정 평균이 관측 대비 ' + (fc.shift >= 0 ? '+' : '') + fc.shift + 'σ 이동.'">
+          추정 OOS {{ fc.oos }}장<span v-if="Math.abs(fc.shift) >= 0.5"> · {{ fc.shift >= 0 ? '+' : '' }}{{ fc.shift }}σ</span></span>
       </span>
       <span class="spec">
         <span class="lbl">user spec<span v-if="multi" class="shared" title="겹쳐보기 모드: 이 spec은 분할값 전체에 공유 적용됩니다">· 전체 값 공유</span></span>
@@ -151,6 +157,8 @@ const ck = (v) => (v == null ? '' : (v < 1 ? 'bad' : (v < 1.33 ? 'warn' : 'good'
 .title { font-size: 16px; font-weight: 600; color: var(--text); letter-spacing: -0.01em; display: flex; align-items: center; gap: 8px; }
 .cf { font-size: 12px; font-weight: 500; color: var(--accent); }
 .thin { font-size: 10px; font-weight: 700; color: #92400e; background: #fde68a; padding: 1px 7px; border-radius: 999px; text-transform: uppercase; }
+.fc { font-size: 10px; font-weight: 700; color: #854d0e; background: #fef3c7; border: 1px solid #fcd34d; padding: 1px 8px; border-radius: 999px; cursor: help; }
+.fc.bad { color: #991b1b; background: #fee2e2; border-color: #fca5a5; }
 .spec { display: flex; align-items: center; gap: 12px; background: var(--surface-2); padding: 6px 12px; border-radius: 12px; }
 .lbl { font-size: 12px; font-weight: 600; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.03em; }
 .shared { text-transform: none; letter-spacing: 0; font-weight: 600; color: var(--accent); margin-left: 5px; }
