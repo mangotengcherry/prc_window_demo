@@ -18,7 +18,7 @@ const props = defineProps({
   minN: { type: Number, default: 10 },
 })
 
-const mk = (val, color, label) => ({ xAxis: val, lineStyle: { color, type: 'dashed', width: 2 }, label: { formatter: label, fontSize: 9, color } })
+const mk = (val, color, label) => ({ xAxis: val, lineStyle: { color, type: 'dashed', width: 2 }, label: { formatter: label, fontSize: 9, color, backgroundColor: '#fff', padding: [1, 3], borderRadius: 2 } })
 function specLines() {
   const out = []
   if (props.spec.lower != null) out.push(mk(props.spec.lower, C.specUser, 'USL'))

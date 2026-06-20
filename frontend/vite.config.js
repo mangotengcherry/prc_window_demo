@@ -11,4 +11,12 @@ export default defineConfig({
       '/api': 'http://localhost:8000',
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // ECharts(최대 의존성)를 별도 청크로 → 앱 코드 변경 시 캐시 유지, 초기 파싱 부담 분리
+        manualChunks: { echarts: ['echarts', 'vue-echarts'] },
+      },
+    },
+  },
 })

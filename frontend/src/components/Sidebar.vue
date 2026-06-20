@@ -205,7 +205,8 @@ function onDraw() {
         </label>
         <p v-if="!fy.length && !visibleGroups.length" class="none">결과 없음</p>
       </div>
-      <button class="groupbtn" :disabled="checkedRegularTargets.length < 2" @click="showGroupDialog = true">
+      <button class="groupbtn" :disabled="checkedRegularTargets.length < 2" @click="showGroupDialog = true"
+        :title="checkedRegularTargets.length < 2 ? 'Y target을 2개 이상 체크하면 활성화 — 선택한 target들을 합산한 가상 target을 만듭니다' : '선택한 target들을 합산한 가상 target 생성'">
         선택 {{ checkedRegularTargets.length }}개 합산 그룹 만들기
       </button>
       <TargetGroupingDialog v-if="showGroupDialog" :sources="checkedRegularTargets" :existing-names="groupNames"
@@ -239,11 +240,12 @@ function onDraw() {
     </section>
 
     <section>
-      <h3>분할 <small v-if="categoryFeature">{{ categoryValues.length }}/{{ cfValueOptions.length }}</small></h3>
-      <select v-model="categoryFeature" class="mini full">
+      <h3>분할 (값별 비교) <small v-if="categoryFeature">{{ categoryValues.length }}/{{ cfValueOptions.length }}</small></h3>
+      <select v-model="categoryFeature" class="mini full" title="선택한 인자(PPID/ECO/EQP 등) 값별로 차트·표를 나눠 비교">
         <option value="">없음 (분할 안 함)</option>
         <option v-for="cf in columns?.category_features" :key="cf" :value="cf">{{ cf }}</option>
       </select>
+      <p v-if="!categoryFeature" class="muted">PPID·ECO·EQP 등으로 나눠 값별 차이를 비교합니다 (선택).</p>
       <template v-if="categoryFeature">
         <div class="listbox sm">
           <label v-for="v in cfValueOptions" :key="v" class="item" :class="{ on: categoryValues.includes(v) }">
@@ -254,7 +256,7 @@ function onDraw() {
           <button :class="{ on: chartMode === 'split' }" @click="chartMode = 'split'">분리</button>
           <button :class="{ on: chartMode === 'multi_line' }" @click="chartMode = 'multi_line'">겹쳐보기</button>
         </div>
-        <p class="muted">{{ chartMode === 'split' ? '값별로 차트·행을 따로 표시' : '한 차트에 값별 추세선을 겹쳐 비교' }}</p>
+        <p class="muted">{{ chartMode === 'split' ? '값별로 차트·행을 따로 표시 (값마다 user spec 개별)' : '한 차트에 값별 추세선을 겹쳐 비교 (user spec 공유)' }}</p>
       </template>
     </section>
 
@@ -310,7 +312,7 @@ h3 small { font-size: 11px; font-weight: 600; color: var(--accent); background: 
 .item input { width: 14px; height: 14px; accent-color: var(--accent); }
 .item.grp { background: var(--accent-weak); }
 .item.grp .gname { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.gbadge { font-size: 9px; font-weight: 700; color: #fff; background: var(--accent); padding: 1px 6px; border-radius: 999px; }
+.gbadge { font-size: 9px; font-weight: 700; color: var(--accent); background: #fff; border: 1px solid var(--accent); padding: 1px 6px; border-radius: 999px; }
 .grm { color: #d70015; cursor: pointer; font-weight: 700; padding: 0 2px; }
 .groupbtn { padding: 8px; font-size: 12px; font-weight: 600; color: var(--accent); background: #fff; border: 1px dashed var(--accent); border-radius: 9px; cursor: pointer; }
 .groupbtn:disabled { color: var(--text-2); border-color: var(--border); border-style: solid; cursor: not-allowed; opacity: .7; }

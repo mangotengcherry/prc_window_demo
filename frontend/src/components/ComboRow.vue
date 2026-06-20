@@ -103,7 +103,7 @@ const ck = (v) => (v == null ? '' : (v < 1 ? 'bad' : (v < 1.33 ? 'warn' : 'good'
         <WindowChart v-else :groups="windowGroups" :x-feature="xName" :y-target="combo.y_target" :spec="spec" :dc-spec="dcSpec" :min-n="minN" />
       </div>
       <div class="cell">
-        <div class="cap">시계열 (trackout_time)</div>
+        <div class="cap">시계열 (trackout_time) <span class="hint" title="차트 우상단 brush 도구로 기간을 드래그하면 window·요약표가 그 구간 wafer로 재집계됩니다">⛶ 기간 드래그 → 재집계</span></div>
         <ComboTimeSeries v-if="!multi"
           :target="target" :feature="feature" :estimate="estimate" :show-estimate="showEstimate"
           :y-target="combo.y_target" :x-feature="xName" :spec="spec" :dc-spec="dcSpec" :sampled="sampled"
@@ -147,5 +147,6 @@ const ck = (v) => (v == null ? '' : (v < 1 ? 'bad' : (v < 1.33 ? 'warn' : 'good'
 .charts { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 .cell { min-width: 0; }
 .cap { font-size: 11px; color: var(--text-2); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+.cap .hint { text-transform: none; letter-spacing: 0; font-weight: 600; color: var(--accent); background: var(--accent-weak); padding: 1px 7px; border-radius: 999px; margin-left: 6px; cursor: help; }
 @media (max-width: 1100px) { .charts { grid-template-columns: 1fr; } }
 </style>

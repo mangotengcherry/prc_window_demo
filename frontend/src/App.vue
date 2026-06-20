@@ -1,10 +1,11 @@
 <script setup>
 // 레이아웃 + 상태 보유(부모). [Sidebar] + [조건요약/상태] + [조합별 ComboRow] + [Table]
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, shallowRef, reactive, computed, onMounted, defineAsyncComponent } from 'vue'
 import Sidebar from './components/Sidebar.vue'
 import ComboRow from './components/ComboRow.vue'
 import DataTable from './components/DataTable.vue'
-import InteractionPanel from './components/InteractionPanel.vue'
+// 보조 분석 패널(차트 3개) — 결과가 있을 때만 필요 → 지연 로드로 초기 번들·파싱 분리
+const InteractionPanel = defineAsyncComponent(() => import('./components/InteractionPanel.vue'))
 import { fetchColumns, fetchXFeatureOptions, fetchBinned, fetchTimeseries, fetchTable } from './api/client.js'
 import { cpk } from './stats.js'
 import { SERIES } from './palette.js'
@@ -13,9 +14,10 @@ import { queryId, shareUrl, condFromUrl } from './share.js'
 const columns = ref(null)
 const xFeatureOptions = ref([])
 
-const binned = ref(null)
-const timeseries = ref(null)
-const tableRows = ref([])
+// 서버 소유 대용량 페이로드 → shallowRef (내부를 깊은 reactive로 만들지 않아 변환·읽기 비용 절감)
+const binned = shallowRef(null)
+const timeseries = shallowRef(null)
+const tableRows = shallowRef([])
 const specByCombo = reactive({})
 
 const status = ref('initial') // initial | loading | loaded | empty | error
@@ -26,6 +28,7 @@ const showEstimate = ref(false) // 미관측 wafer 추정 y 표시(분리 모드
 const initialCond = ref(condFromUrl()) // 공유 URL(?q=)로 들어온 경우 복원
 const copied = ref(false)
 const selection = ref(null) // linked brushing: [startISO, endISO] | null
+const reaggregating = ref(false) // brush 재집계 진행중(피드백용)
 
 const comboKey = (xf, yt, cfv) => `${xf}__${yt}__${cfv || ''}`
 
@@ -170,9 +173,9 @@ const condSummary = computed(() => {
 })
 
 // 겹쳐보기(multi_line)는 (x,y) 공유 spec → cfv 무시. 분리(split)는 분할값별 spec.
+const isMultiMode = computed(() => lastCond.value?.category_feature?.chart_mode === 'multi_line')
 function specFor(xf, yt, cfv) {
-  const multi = lastCond.value?.category_feature?.chart_mode === 'multi_line'
-  return specByCombo[comboKey(xf, yt, multi ? null : cfv)] || {}
+  return specByCombo[comboKey(xf, yt, isMultiMode.value ? null : cfv)] || {}
 }
 
 // provenance(출처·기간·표본·쿼리ID) + 공유 링크
@@ -194,14 +197,22 @@ async function onBrush(range) {
   selection.value = range
   await reaggregate()
 }
+let reaggSeq = 0
 async function reaggregate() {
   if (!lastCond.value) return
+  const seq = ++reaggSeq
+  reaggregating.value = true
   try {
     const cond = { ...lastCond.value, selection: selection.value ? { time_range: selection.value } : null }
     const [b, tbl] = await Promise.all([fetchBinned(cond), fetchTable(cond)])
+    if (seq !== reaggSeq) return // 더 최신 brush 요청이 있으면 폐기(stale 방지)
     binned.value = b
     tableRows.value = tbl.rows
-  } catch (e) { errorMsg.value = e.message || '재집계 실패' }
+  } catch (e) {
+    if (seq === reaggSeq) errorMsg.value = e.message || '재집계 실패'
+  } finally {
+    if (seq === reaggSeq) reaggregating.value = false
+  }
 }
 function clearSelection() { selection.value = null; reaggregate() }
 const selLabel = computed(() => selection.value ? `${selection.value[0].slice(0, 10)} ~ ${selection.value[1].slice(0, 10)}` : '')
@@ -231,6 +242,8 @@ async function copyShare() {
           <label class="esttog" :class="{ on: showEstimate }" title="미관측 wafer의 추정 y를 시계열에 표시 (y~x 회귀, 관측값과 다른 표식). 분리 모드 적용">
             <input type="checkbox" v-model="showEstimate" /> 추정 y
           </label>
+          <span v-if="showEstimate && isMultiMode" class="estnote" title="겹쳐보기(multi-line) 모드에서는 추정 y를 표시하지 않습니다. 분리 모드에서 확인하세요.">↳ 분리 모드에서 표시</span>
+          <button v-if="lastCond" class="sharebtn" :title="'현재 분석 조건을 URL로 복사 (같은 링크로 재현)'" @click="copyShare">{{ copied ? '복사됨 ✓' : '🔗 공유' }}</button>
           <span class="badge" :class="status">{{ status }}</span>
           <span v-if="lastQueryAt" class="qt">조회 {{ lastQueryAt }}</span>
         </div>
@@ -238,12 +251,11 @@ async function copyShare() {
 
       <div v-if="provenance" class="prov">
         <span><b>출처</b> {{ provenance.source }}</span>
-        <span><b>분석기간(fab)</b> {{ provenance.fabRange }}</span>
-        <span><b>y확보(eds)</b> {{ provenance.edsRange }}</span>
+        <span><b>분석기간 · fab</b> {{ provenance.fabRange }}</span>
+        <span><b>y확보 · eds</b> {{ provenance.edsRange }}</span>
         <span><b>표본</b> {{ provenance.n }}</span>
         <span><b>쿼리</b> {{ provenance.qid }}</span>
         <span v-if="provenance.lagDays" class="lag" :title="`EDS lag ${provenance.lagDays}일 — 최근 ${provenance.lagDays}일 wafer는 미관측이라 window/Cpk 집계에서 빠집니다`">⚠ window는 ~{{ provenance.lagDays }}일 이전 기준</span>
-        <button class="copy" @click="copyShare">{{ copied ? '복사됨 ✓' : '🔗 링크 복사' }}</button>
       </div>
 
       <p v-if="status === 'error'" class="banner err">⚠ {{ errorMsg }}</p>
@@ -252,21 +264,21 @@ async function copyShare() {
       <p v-else-if="status === 'initial'" class="banner">왼쪽에서 분석 조건을 선택하고 "차트 작성"을 누르세요.</p>
 
       <div v-if="selection" class="selbar">
-        <span>⏱ 기간 선택 <b>{{ selLabel }}</b> · window·요약표가 이 구간 wafer로 재집계됨 (시계열은 전체)</span>
+        <span>⏱ 기간 선택 <b>{{ selLabel }}</b> · <span v-if="reaggregating" class="reagg">재집계 중…</span><span v-else>window·요약표가 이 구간 wafer로 재집계됨 (시계열은 전체)</span></span>
         <button @click="clearSelection">전체 보기</button>
       </div>
 
       <section v-if="kpis" class="kpis">
         <div class="kpi" title="현재 표시된 (feature × target) 조합 수">
-          <span class="kv">{{ kpis.combos }}</span><span class="kl">조합 ⓘ</span></div>
+          <span class="kv">{{ kpis.combos }}</span><span class="kl">조합</span></div>
         <div class="kpi" title="선택 기간 내 wafer 행 수 (관측 + 미관측). 기준: fab_track_out_time">
-          <span class="kv">{{ kpis.obs ?? '-' }}</span><span class="kl">표본 수(기간) ⓘ</span></div>
-        <div class="kpi" :title="'모든 조합의 Cpk(DC spec 기준) 중 최솟값. user 입력 없이 항상 산출.\nCpk = min(DSU−μ, μ−DSL) / (3σ_단기)\nσ_단기 = 이동범위 MR/1.128\n< 1.00 위험(빨강) · < 1.33 주의(노랑)'">
-          <span class="kv" :class="cpkClass(kpis.worstCpkDc)">{{ kpis.worstCpkDc == null ? '-' : kpis.worstCpkDc.toFixed(2) }}</span><span class="kl">최저 Cpk(DC) ⓘ</span></div>
-        <div class="kpi" :title="'user spec을 입력한 조합들의 Cpk 중 최솟값.\nCpk = min(USU−μ, μ−USL) / (3σ_단기)\nuser spec 미입력이면 \'-\''">
-          <span class="kv" :class="cpkClass(kpis.worstCpkUser)">{{ kpis.worstCpkUser == null ? '-' : kpis.worstCpkUser.toFixed(2) }}</span><span class="kl">최저 Cpk(user) ⓘ</span></div>
+          <span class="kv">{{ kpis.obs ?? '-' }}</span><span class="kl">표본 수(기간)</span></div>
+        <div class="kpi" :class="'st-' + cpkClass(kpis.worstCpkDc)" :title="'모든 조합의 Cpk(DC spec 기준) 중 최솟값. user 입력 없이 항상 산출.\nCpk = min(DSU−μ, μ−DSL) / (3σ_단기)\nσ_단기 = 이동범위 MR/1.128\n< 1.00 위험(빨강) · < 1.33 주의(노랑)'">
+          <span class="kv" :class="cpkClass(kpis.worstCpkDc)">{{ kpis.worstCpkDc == null ? '-' : kpis.worstCpkDc.toFixed(2) }}</span><span class="kl">최저 Cpk(DC)</span></div>
+        <div class="kpi" :class="'st-' + cpkClass(kpis.worstCpkUser)" :title="'user spec을 입력한 조합들의 Cpk 중 최솟값.\nCpk = min(USU−μ, μ−USL) / (3σ_단기)\nuser spec 미입력이면 \'-\''">
+          <span class="kv" :class="cpkClass(kpis.worstCpkUser)">{{ kpis.worstCpkUser == null ? '-' : kpis.worstCpkUser.toFixed(2) }}</span><span class="kl">최저 Cpk(user)</span></div>
         <div class="kpi" :title="'신뢰도 낮은 조합 수.\n조합의 최대 bin 표본수 < min_n(=' + (columns?.min_n ?? 10) + ') 이면 thin\n표본 부족으로 평균이 불안정'">
-          <span class="kv" :class="{ warnum: kpis.thinN }">{{ kpis.thinN }}</span><span class="kl">thin 조합 ⓘ</span></div>
+          <span class="kv" :class="{ warnum: kpis.thinN }">{{ kpis.thinN }}</span><span class="kl">thin 조합</span></div>
       </section>
 
       <section class="rows">
@@ -296,33 +308,41 @@ async function copyShare() {
 .topbar { display: flex; align-items: flex-start; justify-content: space-between; padding: 24px 32px 8px; }
 .topbar h1 { font-size: 24px; font-weight: 600; margin: 0; letter-spacing: -0.02em; }
 .sub { margin: 3px 0 0; font-size: 13px; color: var(--text-2); }
-.meta { display: flex; align-items: center; gap: 10px; }
+.meta { display: flex; align-items: center; gap: 8px; }
 .qt { font-size: 12px; color: var(--text-2); }
 .esttog { display: flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: var(--text-2); padding: 4px 10px; border: 1px solid var(--border); border-radius: 999px; background: #fff; cursor: pointer; }
 .esttog.on { color: var(--accent); border-color: var(--accent); background: var(--accent-weak); }
 .esttog input { width: 13px; height: 13px; accent-color: var(--accent); }
+.estnote { font-size: 10px; font-weight: 600; color: #92400e; background: #fef3c7; padding: 2px 7px; border-radius: 999px; cursor: help; }
+.sharebtn { font-size: 12px; font-weight: 600; color: var(--accent); background: #fff; border: 1px solid var(--accent); border-radius: 999px; padding: 4px 12px; cursor: pointer; }
+.sharebtn:hover { background: var(--accent-weak); }
 .badge { font-size: 11px; font-weight: 600; padding: 4px 11px; border-radius: 999px; text-transform: uppercase; letter-spacing: .03em; background: #e5e7eb; color: #374151; }
 .badge.loaded { background: #dcfce7; color: #166534; }
 .badge.loading { background: #dbeafe; color: #1e40af; }
 .badge.error { background: #fee2e2; color: #991b1b; }
 .badge.empty { background: #fef9c3; color: #854d0e; }
-.prov { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; margin: 6px 32px 0; padding: 8px 14px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; font-size: 11.5px; color: var(--text-2); }
-.prov b { font-weight: 700; color: var(--text); font-weight: 600; margin-right: 3px; }
-.prov .lag { color: #92400e; background: #fef3c7; padding: 1px 8px; border-radius: 999px; font-weight: 600; cursor: help; }
-.prov .copy { margin-left: auto; padding: 5px 11px; font-size: 11.5px; font-weight: 600; color: var(--accent); background: #fff; border: 1px solid var(--accent); border-radius: 8px; cursor: pointer; }
-.prov .copy:hover { background: var(--accent-weak); }
-.selbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 8px 32px 0; padding: 8px 14px; background: var(--accent-weak); border: 1px solid var(--accent); border-radius: 10px; font-size: 12.5px; color: var(--text); }
+/* provenance: 필드 사이 구분선 + 라벨(크롬)/값(콘텐츠) 위계 분리 */
+.prov { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 0; margin: 14px 32px 0; padding: 8px 14px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; font-size: 11.5px; color: var(--text); }
+.prov > span { padding: 0 14px; border-left: 1px solid var(--border); line-height: 1.4; }
+.prov > span:first-child { padding-left: 0; border-left: none; }
+.prov b { font-weight: 600; color: var(--text-2); text-transform: uppercase; font-size: 10px; letter-spacing: .04em; margin-right: 5px; }
+.prov .lag { color: #92400e; background: #fef3c7; padding: 1px 8px; border-radius: 999px; font-weight: 600; cursor: help; border-left: none; margin-left: 4px; }
+.selbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 14px 32px 0; padding: 8px 14px; background: var(--accent-weak); border: 1px solid var(--accent); border-radius: 10px; font-size: 12.5px; color: var(--text); }
 .selbar b { color: var(--accent); }
+.selbar .reagg { color: var(--accent); font-weight: 600; }
 .selbar button { padding: 5px 12px; font-size: 12px; font-weight: 600; color: #fff; background: var(--accent); border: none; border-radius: 8px; cursor: pointer; white-space: nowrap; }
-.banner { margin: 6px 32px; font-size: 14px; color: var(--text-2); }
+.banner { margin: 10px 32px 0; font-size: 14px; color: var(--text-2); }
 .banner.err { color: #d70015; }
-.kpis { display: flex; gap: 12px; padding: 8px 32px 2px; flex-wrap: wrap; }
-.kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-sm); padding: 10px 18px; min-width: 96px; display: flex; flex-direction: column; gap: 2px; }
+.kpis { display: flex; gap: 12px; padding: 14px 32px 0; flex-wrap: wrap; }
+.kpi { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--border); border-radius: 14px; box-shadow: var(--shadow-sm); padding: 10px 16px; min-width: 96px; display: flex; flex-direction: column; gap: 2px; cursor: help; }
+.kpi.st-good { border-left-color: #16a34a; }
+.kpi.st-warn { border-left-color: #d97706; }
+.kpi.st-bad { border-left-color: #dc2626; }
 .kv { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; }
 .kv.good { color: #166534; } .kv.warn { color: #854d0e; } .kv.bad { color: #991b1b; } .kv.warnum { color: #854d0e; }
 .kl { font-size: 11px; color: var(--text-2); text-transform: uppercase; letter-spacing: .03em; }
-.rows { display: flex; flex-direction: column; gap: 16px; padding: 12px 32px; }
-.table-area { padding: 6px 32px 36px; display: flex; flex-direction: column; gap: 10px; }
+.rows { display: flex; flex-direction: column; gap: 16px; padding: 16px 32px; }
+.table-area { padding: 4px 32px 36px; display: flex; flex-direction: column; gap: 10px; }
 .ix-area { padding: 0 32px 40px; }
 .pane-title { margin: 0; font-size: 13px; font-weight: 600; color: var(--text-2); text-transform: uppercase; letter-spacing: .04em; }
 </style>
