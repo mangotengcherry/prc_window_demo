@@ -170,6 +170,7 @@ class FeatureSeries(BaseModel):
     points: list  # [[iso, value], ...]
     avg: Optional[float] = None
     control_limits: Optional[Dict[str, float]] = None
+    drift: Optional[Dict[str, Any]] = None  # {shift, direction, flagged} — 추세 감지
 
 
 class EstimateSeries(BaseModel):

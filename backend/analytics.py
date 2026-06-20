@@ -198,6 +198,20 @@ def _control_limits(values: pd.Series):
     return {"ucl": round(mu + 3 * sigma, 4), "lcl": round(mu - 3 * sigma, 4), "sigma": round(sigma, 4)}
 
 
+def _drift(points) -> Optional[dict]:
+    """인사이트 4: 시계열 최근(마지막 20%) 평균이 기준(앞 80%) 대비 몇 σ 이동했는지 → 추세 감지."""
+    n = len(points)
+    if n < 20:
+        return None
+    vals = np.array([p[1] for p in points], dtype=float)
+    sd = float(vals.std())
+    if sd == 0:
+        return None
+    k = max(5, n // 5)
+    shift = round((float(vals[-k:].mean()) - float(vals[:-k].mean())) / sd, 2)
+    return {"shift": shift, "direction": "up" if shift >= 0 else "down", "flagged": bool(abs(shift) >= 1.0)}
+
+
 def _fit_estimate(obs_rows: pd.DataFrame, sub: pd.DataFrame, xf: str, yt: str):
     """관측 wafer로 y~x 선형회귀 적합 → 미관측 wafer의 x로 y 추정 (사용자 선택: X–Y 회귀)."""
     o = obs_rows[obs_rows[xf].notna()]
@@ -276,6 +290,7 @@ def compute_timeseries(req) -> dict:
                 "unit": units.get(xf, ""), "category_feature_value": cf_val, "points": points,
                 "avg": round(float(fs[xf].mean()), 4) if len(fs) else None,
                 "control_limits": _control_limits(fs[xf]) if len(fs) else None,
+                "drift": _drift(points),
             })
 
     return {

@@ -142,6 +142,12 @@ const estInfo = computed(() => {
   const f = props.estimate.fit_summary
   return { r2: f.r2, n: f.n, count: props.estimate.points.length, weak: f.r2 != null && f.r2 < 0.2 }
 })
+// 인사이트 4: feature 추세/drift 감지 (최근 평균이 기준 대비 σ 이동, flagged면 배지)
+const driftInfo = computed(() => {
+  if (isMulti.value) return null
+  const d = props.feature?.drift
+  return d && d.flagged ? d : null
+})
 
 function singleOption() {
   const tp = tPts(props.target)
@@ -208,6 +214,9 @@ const option = computed(() => (isMulti.value ? multiOption() : singleOption()))
       :title="`추정 y~x 회귀 · R²=${estInfo.r2 ?? '-'} · 적합 n=${estInfo.n} · 추정 ${estInfo.count}점` + (estInfo.weak ? ' · 적합도 낮음(참고용)' : '')">
       추정 R² {{ estInfo.r2 == null ? '-' : estInfo.r2.toFixed(2) }}{{ estInfo.weak ? ' ⚠' : '' }}
     </span>
+    <span v-if="driftInfo" class="drift" :title="`feature 최근(마지막 20%) 평균이 기준 대비 ${driftInfo.shift >= 0 ? '+' : ''}${driftInfo.shift}σ 이동 — 추세/drift 감지`">
+      ⚠ 추세 {{ driftInfo.direction === 'up' ? '↑' : '↓' }} {{ driftInfo.shift >= 0 ? '+' : '' }}{{ driftInfo.shift }}σ
+    </span>
     <VChart v-if="hasData" class="chart" :option="option" autoresize @brushend="onBrushEnd" />
     <p v-else class="empty">시계열 데이터 없음</p>
   </div>
@@ -218,6 +227,7 @@ const option = computed(() => (isMulti.value ? multiOption() : singleOption()))
 .ds { position: absolute; top: 2px; left: 56px; z-index: 2; font-size: 10px; font-weight: 600; color: #92400e; background: #fde68a; padding: 1px 7px; border-radius: 999px; }
 .est { position: absolute; top: 2px; left: 56px; z-index: 2; font-size: 10px; font-weight: 600; color: #6b21a8; background: #f3e8ff; padding: 1px 7px; border-radius: 999px; }
 .est.weak { color: #92400e; background: #fde68a; }
+.drift { position: absolute; top: 52%; left: 56px; z-index: 2; font-size: 10px; font-weight: 700; color: #9a3412; background: #ffedd5; border: 1px solid #fdba74; padding: 1px 7px; border-radius: 999px; }
 .chart { height: 400px; width: 100%; }
 .empty { height: 400px; display: flex; align-items: center; justify-content: center; color: #aaa; font-size: 13px; }
 </style>
