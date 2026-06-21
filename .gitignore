@@ -8,6 +8,7 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+.pytest_cache/
 
 # Jupyter
 .ipynb_checkpoints/
@@ -27,6 +28,7 @@ project_manage.md
 agents.md
 claude.md
 info.md
+PROJECT_REVIEW_FOR_CLAUDE.md
 
 # UI 미리보기 산출물(전송용, 커밋 제외)
 demo.gif
