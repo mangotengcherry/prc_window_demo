@@ -22,7 +22,7 @@
 - **용어 구분(중요)**:
   - **관리한계(control limit)** = 데이터로부터 산출한 `μ ± 3σ`. "이 공정이 평소와 다른가"(통계적 안정성).
   - **spec(규격)** = 합격 기준. `DC spec`(장비/공정 기본 규격, 항상 존재) vs `user spec`(사용자가 입력하는 평가 기준).
-  - **σ_단기(within)** = 이동범위 기반 `MR̄/1.128` → Cpk용(군내 산포). **σ_전체(overall)** = 표본 표준편차 → Ppk용(장기 산포).
+  - **σ_군내(within)** = **합리적 부분군(EQP/chamber/lot)별 풀드 표준편차** → Cpk용(부분군 미지정 시 time I-MR `MR̄/1.128` fallback). **σ_전체(overall)** = 표본 표준편차 → Ppk용. **σ_overall² = σ_within² + σ_between² → Cpk≫Ppk면 부분군 간(설비/챔버) 차이 큼.**
 
 ---
 
@@ -99,8 +99,9 @@
 ### 4.2 공정능력(Cpk) 요약
 - **무엇**: feature별 `Cpk(DC)`를 **약한 순**으로. (target과 무관 — Cpk는 feature가 자기 spec 대비 안정한지이므로 feature 단위가 정직.)
 - **도입 배경**: driver(4.1)로 "무엇이 중요"한지 알았으면, 그 feature가 "지금 관리되고 있나"를 봐야 한다.
-- **근거**: `Cpk = min(USL−μ, μ−LSL) / (3·σ_단기)`, σ_단기 = `MR̄/1.128`.
-- **가정·한계**: σ_단기는 시간 정렬(이동범위) 가정. 분포 정규성 암묵 가정.
+- **근거**: `Cpk = min(USL−μ, μ−LSL) / (3·σ_within)`, σ_within = **합리적 부분군(EQP/chamber/lot)별 풀드** σ(⚙에서 선택; 미지정 시 time I-MR). Ppk는 σ_overall.
+- **진단**: Cpk·Ppk + 안정성(σ_overall/σ_within)·중심(Cp 대비)으로 상태 분류(능력부족/산포 drift/과잉/중심 치우침). **Cpk≫Ppk = 부분군 간(설비/챔버) 차이** → 부분군 선택이 핵심.
+- **가정·한계**: 부분군이 적절해야(섞이면 within 오염 → 잘못된 능력). 정규성 암묵 가정.
 - **교차검증 포인트**: feature×target 매트릭스가 아니라 feature 리스트인 게 맞나? (맞음 — Cpk(DC)는 target 독립이라 매트릭스면 열이 중복.)
 
 ### 4.3 조건 비교 랭킹
@@ -122,8 +123,8 @@
 
 ### 5.2 capability strip (Cpk/Ppk vs DC/user)
 - **무엇**: 이 조합 feature의 `Cpk/Ppk`를 DC·user spec 기준으로.
-- **근거**: Cpk=단기σ, Ppk=전체σ. `Ppk≤Cpk`면 군간 변동(드리프트) 존재 신호.
-- **교차검증 포인트**: Cpk와 Ppk 격차가 크면 5.4 drift와 정합하는가?
+- **근거**: Cpk=군내(부분군별 풀드) σ, Ppk=전체 σ. `Cpk≫Ppk`(σ_overall/σ_within 큼)면 **부분군 간(설비/챔버) 차이**(mismatch) 신호. 부분군은 ⚙에서 선택(EQP_CH 기본). 각 조합에 DC·user spec 진단 태그.
+- **교차검증 포인트**: 부분군을 바꾸면 진단이 달라지는가(예: 챔버 mismatch는 EQP_CH에서만 드러남)? 5.4 시계열 '평균 drift'(μ 이동)와 '산포 drift'(σ)를 구분하는가?
 
 ### 5.3 시계열 차트 (상=target, 하=feature) — 카드의 핵심
 한 차트에 여러 레이어가 겹친다. 각 레이어의 도입 배경:
@@ -202,7 +203,8 @@ window(5.1)와 **독립**. X feature·Y target 중 2개를 골라 x/y축으로, 
 
 | 항목 | 공식 | 비고 |
 |---|---|---|
-| 단기 σ(within) | `MR̄ / 1.128`, `MR̄=mean(|xᵢ−xᵢ₋₁|)` | I-MR, d2(n=2)=1.128 |
+| 군내 σ(within) | 부분군별 풀드 `√(Σ_g Σ(x−x̄_g)² / Σ_g(n_g−1))` | 부분군=EQP/chamber/lot(⚙ 선택). 미지정 시 time I-MR `MR̄/1.128` |
+| 군간 분해 | `σ_overall² = σ_within² + σ_between²` | Cpk≫Ppk ⟺ σ_between(부분군 간) 큼 |
 | 전체 σ(overall) | 표본 표준편차 | ddof=1 |
 | 관리한계 | `μ ± 3σ` | σ=관측 target 표본 std |
 | Cpk | `min(USL−μ, μ−LSL)/(3·σ_within)` | 군내 능력 |
@@ -225,7 +227,7 @@ window(5.1)와 **독립**. X feature·Y target 중 2개를 골라 x/y축으로, 
 3. **관리한계 vs spec**: 별도 target spec 없이 "관측 target ±3σ"를 이탈 기준으로 쓰는 게 타당한가? 어떤 경우 위험한가?
 4. **추정 외삽**: 최근 feature가 관측 X 범위를 벗어났을 때(drift) 동시점 회귀 외삽의 신뢰도는? R² 외 어떤 지표를 봐야 하나?
 5. **drift 분할(80/20)**: baseline 80% / recent 20%, |Δ|≥1σ flag — 둔감/과민 균형이 적절한가? 계절성·점진 추세를 놓치나?
-6. **Cpk에 단기σ**: within-σ(MR)가 이 데이터(시간 정렬·혼합 lot)에서 적절한가? subgroup 정의가 타당한가?
+6. **Cpk 부분군**: within-σ는 부분군(EQP/chamber/lot)별 풀드(⚙ 선택). 부분군에 따라 진단이 바뀜(챔버 mismatch는 EQP_CH에서만 드러나고 EQP/time-IMR엔 가려짐) — 데이터에 맞는 합리적 부분군을 골랐는가?
 7. **상관→의사결정**: driver 랭킹은 상관(비인과·선형)인데, 이를 "원인"처럼 쓰는 UI 표현이 과한가?
 8. **조건 비교**: 관측 데이터 평균 줄세움이 교란요인(설비-제품 혼합)을 무시하는가? 언제 오도하나?
 9. **정규근사**: in-spec%·관리한계의 정규성 가정이 깨지는 분포에서 표시가 오도할 수 있는가?

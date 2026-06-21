@@ -175,8 +175,11 @@ def fact_table() -> pd.DataFrame:
                 c = _center(key)[0]
                 feats[key] = c + (feats[key] - c) * 0.30
             elif item == "TEMP_SENSOR_01":
-                c = _center(key)[0]
-                feats[key] = c + (feats[key] - c) * 0.40 + 6.0 * np.sin(days_ago / 11.0)
+                # 챔버(EQP_CH) 간 대칭 오프셋(±0.8σ) — 중심은 유지하되 군간 차이 큼.
+                # → EQP_CH 부분군 Cpk≫Ppk(설비 mismatch)로 드러나지만, time-IMR엔 within에 흡수돼 가려짐.
+                c, sd0 = _center(key)
+                feats[key] = c + (feats[key] - c) * 0.40
+                feats[key] += 0.8 * sd0 if cat_feat_vals.get("EQP_CH") == "CH2" else -0.8 * sd0
         # 2) target — BIN은 driver feature에 약한 선형 의존 + 노이즈, 그 외는 무작위
         dep = 3.0 * (feats[driver_key] - driver_c) if driver_key else 0.0
         bin_noise = rng_t.normal(0, 18, size=len(bin_targets))  # BIN 노이즈 일괄(601회 개별 호출 회피)

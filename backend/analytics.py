@@ -22,12 +22,27 @@ def _filter_rows(df: pd.DataFrame, *, line_id, product, fab_step, date_range) ->
 
 
 def _within_std(vals) -> Optional[float]:
-    """단기(short-term) σ — 이동범위 기반 (I-MR): mean(|Δ|)/1.128. Cpk용."""
+    """단기(short-term) σ — 이동범위 기반 (I-MR): mean(|Δ|)/1.128. Cpk용(부분군 미지정 fallback)."""
     a = np.asarray(vals, dtype=float)
     if a.size < 2:
         return None
     mr = np.abs(np.diff(a)).mean()
     return round(float(mr / 1.128), 4)
+
+
+def _pooled_within_std(values, groups) -> Optional[float]:
+    """합리적 부분군(EQP/EQP_CH/lot 등) 내 풀드 표준편차 = √(Σ_g Σ(x−x̄_g)² / Σ_g(n_g−1)).
+    = ANOVA 군내(오차) σ. Cpk의 within σ — σ_overall²=σ_within²+σ_between² 분해가 성립.
+    부분군이 모두 크기 1이면 None(분리 불가) → 호출부에서 time I-MR로 fallback."""
+    d = pd.DataFrame({"v": pd.to_numeric(pd.Series(values), errors="coerce"), "g": pd.Series(groups).astype(str).values})
+    d = d.dropna(subset=["v"])
+    ss, dof = 0.0, 0
+    for _, grp in d.groupby("g", observed=True):
+        v = grp["v"].to_numpy(dtype=float)
+        if v.size >= 2:
+            ss += float(((v - v.mean()) ** 2).sum())
+            dof += v.size - 1
+    return round(float(np.sqrt(ss / dof)), 4) if dof > 0 else None
 
 
 def _with_target_groups(df: pd.DataFrame, groups) -> pd.DataFrame:
@@ -337,6 +352,7 @@ def compute_table(req) -> dict:
     base = _apply_target_date(base[base["observed"]], req.target_date_range)
     dcs = D.dc_spec()
     splits = _cf_splits(base, getattr(req, "category_feature", None))
+    sub_col = getattr(req, "cpk_subgroup", None)  # Cpk within σ 부분군(EQP/EQP_CH/lot). 없으면 time I-MR
 
     rows = []
     for cf_name, cf_val, sub in splits:
@@ -346,7 +362,15 @@ def compute_table(req) -> dict:
             for yt in req.y_targets:
                 s = sub[sub[xf].notna() & sub[yt].notna()] if xf in sub.columns else sub.iloc[0:0]
                 n = int(len(s))
-                x_within = _within_std(s.sort_values("fab_track_out_time")[xf].values) if n else None
+                # Cpk within σ: 합리적 부분군(EQP/chamber/lot)으로 풀드, 불가 시 time I-MR fallback
+                x_within, within_method = None, None
+                if n:
+                    if sub_col and sub_col in s.columns:
+                        x_within = _pooled_within_std(s[xf].values, s[sub_col].values)
+                        within_method = sub_col
+                    if x_within is None:
+                        x_within = _within_std(s.sort_values("fab_track_out_time")[xf].values)
+                        within_method = "time(I-MR)"
                 rows.append({
                     "line_id": req.line_id, "product": req.product,
                     "category": req.category, "eds_step": req.eds_step, "fab_step": req.fab_step,
@@ -354,6 +378,7 @@ def compute_table(req) -> dict:
                     "x_value": round(float(s[xf].mean()), 4) if n else None,
                     "x_std": round(float(s[xf].std()), 4) if n > 1 else None,
                     "x_std_within": x_within,
+                    "x_within_method": within_method,
                     "y_target": yt,
                     "y_value": round(float(s[yt].mean()), 4) if n else None,
                     "value_status": "observed",

@@ -211,6 +211,7 @@ class TableRequest(BaseModel):
     y_target_groups: List[TargetGroup] = []
     category_feature: Optional[CategoryFeatureSel] = None
     selection: Optional[Selection] = None
+    cpk_subgroup: Optional[str] = None  # Cpk within σ 부분군 컬럼(EQP/EQP_CH/root_lot 등). None=time I-MR
 
 
 class TableRow(BaseModel):
@@ -223,7 +224,8 @@ class TableRow(BaseModel):
     x_feature_display_name: str
     x_value: Optional[float]
     x_std: Optional[float] = None         # 전체(long-term) σ → Ppk
-    x_std_within: Optional[float] = None  # 단기(short-term) σ → Cpk
+    x_std_within: Optional[float] = None  # 군내(within-subgroup) σ → Cpk
+    x_within_method: Optional[str] = None # within σ 산출 부분군(EQP/EQP_CH/lot) 또는 "time(I-MR)"
     y_target: str
     y_value: Optional[float]
     value_status: str = "observed"

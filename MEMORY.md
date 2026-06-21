@@ -119,7 +119,7 @@ cd frontend && npm install && npm run dev   # http://localhost:5173
 7. **linked brushing**: 시계열 기간 brush → 해당 wafer로 window·table 재집계(시계열은 전체). (`cf118c3`)
 
 ### 통계 방법론
-- **Cpk**(단기 σ=이동범위 MR/1.128) vs **Ppk**(전체 σ). DC spec 기준은 user 입력 없이 항상, user spec 기준은 입력 시. in-spec%는 정규근사 Φ.
+- **Cpk**(군내 σ=합리적 부분군[EQP/chamber/lot]별 풀드, ⚙에서 선택·localStorage; 미지정 time I-MR=MR/1.128) vs **Ppk**(전체 σ). σ_overall²=within²+between² → Cpk≫Ppk=부분군 간(설비/챔버) 차이. 진단 패널(능력×안정성[산포 drift]×중심), 시계열은 평균 drift 별도. DC/user spec 기준. in-spec%는 정규근사 Φ.
 - 색맹 안전(Okabe-Ito) 팔레트(`palette.js`), 분할 오버레이는 `SERIES`, 히트맵/scatter value는 red/grey `HEAT_RAMP`(팀 컨벤션: 높음=빨강·낮음=회색).
 
 ### 함정 메모
