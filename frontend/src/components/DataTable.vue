@@ -48,9 +48,9 @@ function cpkClass(v) { return v == null ? '' : (v < 1 ? 'bad' : (v < 1.33 ? 'war
           <th title="DC spec upper">DSU</th>
           <th title="user spec 범위 / DC spec 범위 = (USU−USL)/(DSU−DSL)">SPEC(USER/DC)</th>
           <th title="user spec 안에 든 데이터 비율 (정규근사)">SPEC-IN(USER)*</th>
-          <th title="Cpk (user spec, 단기 σ=MR/1.128)">Cpk(u)</th>
+          <th title="Cpk (user spec, 군내 σ=부분군별 풀드)">Cpk(u)</th>
           <th title="Ppk (user spec, 전체 σ)">Ppk(u)</th>
-          <th title="Cpk (DC spec, 단기 σ) — user 입력 불필요">Cpk(DC)</th>
+          <th title="Cpk (DC spec, 군내 σ=부분군별) — user 입력 불필요">Cpk(DC)</th>
           <th title="Ppk (DC spec, 전체 σ)">Ppk(DC)</th>
         </tr>
       </thead>

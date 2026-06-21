@@ -7,7 +7,7 @@ import DataTable from './components/DataTable.vue'
 // 보조 분석 패널(차트 3개) — 결과가 있을 때만 필요 → 지연 로드로 초기 번들·파싱 분리
 const InteractionPanel = defineAsyncComponent(() => import('./components/InteractionPanel.vue'))
 import { fetchColumns, fetchXFeatureOptions, fetchBinned, fetchTimeseries, fetchTable, fetchDrivers, downloadRaw } from './api/client.js'
-import { cpk, capabilityDiagnosis, cpkBand, DEFAULT_CAP_THRESHOLDS } from './stats.js'
+import { cpk, capabilityDiagnosis, cpkBand, DEFAULT_CAP_THRESHOLDS, fmtNum } from './stats.js'
 import { SERIES } from './palette.js'
 import { queryId, shareUrl, condFromUrl } from './share.js'
 
@@ -248,27 +248,6 @@ const tsDriftByFeature = computed(() => {
   return m
 })
 
-// 인사이트 1: lag 기반 관리이탈 사전 예측 — 미확보 wafer 추정이 target 관리한계를 벗어날 예측 수 + 추정 평균 이동(σ)
-const forecast = computed(() => {
-  const ests = (timeseries.value?.estimates || []).filter((e) => e.forecast)
-  if (!ests.length) return null
-  let oos = 0, n = 0, maxShift = 0, best = null
-  ests.forEach((e) => {
-    oos += e.forecast.oos; n += e.forecast.n
-    if (Math.abs(e.forecast.shift) > Math.abs(maxShift)) maxShift = e.forecast.shift
-    if (!best || (e.fit_summary?.r2 ?? 0) > (best.fit_summary?.r2 ?? 0)) best = e
-  })
-  return { oos, n, maxShift, r2: best?.fit_summary?.r2 ?? null,
-           lowConf: !!best?.forecast?.low_conf, extrap: best?.forecast?.extrap ?? 0 }
-})
-// 관리이탈 예보 KPI 툴팁 — 신뢰 가드(저R²·외삽) 사유 포함
-const forecastTitle = computed(() => {
-  const f = forecast.value
-  if (!f) return ''
-  let t = `lag 기반 사전예측: 미확보 wafer를 y~x 회귀로 추정 → target 관리한계(±3σ) 초과 예측 수.\n미확보 batch 추정 평균이 관측 평균 대비 ${f.maxShift >= 0 ? '+' : ''}${f.maxShift}σ 이동(잠복 drift).\n신뢰도: 추정 R²=${f.r2 == null ? '-' : f.r2.toFixed(2)} · 외삽 ${Math.round((f.extrap || 0) * 100)}%(추정 X가 관측 범위 밖)`
-  if (f.lowConf) t += `\n⚠ 신뢰 낮음 → "참고용"으로 강등(R²<0.2 또는 외삽 다수). 단정 경보 아님.`
-  return t
-})
 
 const condSummary = computed(() => {
   const c = lastCond.value
@@ -409,9 +388,6 @@ async function downloadCsv() {
           <span class="kv" :class="cpkClass(kpis.worstCpkUser)">{{ kpis.worstCpkUser == null ? '-' : kpis.worstCpkUser.toFixed(2) }}</span><span class="kl">최저 Cpk(user)</span></div>
         <div class="kpi" :title="'표본 부족 조합 수.\n조합의 최대 bin 표본수 < min_n(=' + (columns?.min_n ?? 10) + ')\n표본이 적어 평균이 불안정한 조합'">
           <span class="kv" :class="{ warnum: kpis.thinN }">{{ kpis.thinN }}</span><span class="kl">표본 부족 조합</span></div>
-        <div v-if="forecast" class="kpi" :class="forecast.lowConf ? '' : (forecast.oos > 0 ? 'st-bad' : (Math.abs(forecast.maxShift) >= 1 ? 'st-warn' : ''))"
-          :title="forecastTitle">
-          <span class="kv" :class="forecast.lowConf ? 'muted' : (forecast.oos > 0 ? 'bad' : (Math.abs(forecast.maxShift) >= 1 ? 'warn' : ''))">{{ forecast.oos }}<small class="shift" v-if="Math.abs(forecast.maxShift) >= 0.5">{{ forecast.maxShift >= 0 ? '+' : '' }}{{ forecast.maxShift }}σ</small></span><span class="kl">관리이탈 예상{{ forecast.lowConf ? '(참고용)' : '' }} ⓘ</span></div>
       </section>
 
       <section v-if="status === 'loaded' && driversData.length" class="drivers-area">
@@ -472,7 +448,7 @@ async function downloadCsv() {
               <tr v-for="(c, i) in g.items" :key="c.cfv" :class="{ best: i === 0 }">
                 <td class="crank">{{ i + 1 }}</td>
                 <td class="ccfv">{{ c.cfv }}</td>
-                <td class="cnum">{{ c.mean == null ? '-' : c.mean.toFixed(1) }}</td>
+                <td class="cnum">{{ fmtNum(c.mean) }}</td>
                 <td><span class="cpkv" :class="cpkClass(c.cpkc)">{{ c.cpkc == null ? '-' : c.cpkc.toFixed(2) }}</span></td>
                 <td class="cn">n={{ c.n }}</td>
               </tr>
@@ -549,8 +525,7 @@ async function downloadCsv() {
 .kpi.st-warn { border-left: 3px solid #d97706; }
 .kpi.st-bad { border-left: 3px solid #dc2626; }
 .kv { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; }
-.kv.good { color: #166534; } .kv.warn { color: #854d0e; } .kv.bad { color: #991b1b; } .kv.warnum { color: #854d0e; } .kv.muted { color: #6b7280; }
-.kv .shift { font-size: 11px; font-weight: 600; margin-left: 4px; opacity: .85; }
+.kv.good { color: #166534; } .kv.warn { color: #854d0e; } .kv.bad { color: #991b1b; } .kv.warnum { color: #854d0e; }
 .kl { font-size: 11px; color: var(--text-2); text-transform: uppercase; letter-spacing: .03em; }
 .drivers-area { padding: 14px 32px 0; display: flex; flex-direction: column; gap: 8px; }
 .drivers-area .pane-title small { text-transform: none; letter-spacing: 0; font-weight: 500; color: var(--text-2); margin-left: 6px; }

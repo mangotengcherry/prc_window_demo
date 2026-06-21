@@ -76,7 +76,7 @@ def targets_by_category() -> dict:
 
 def target_units() -> dict:
     """Y target → 단위 문자열."""
-    return {t: ("ea" if t.startswith("BIN") else "a.u.")
+    return {t: ("ratio" if t.startswith("BIN") else "a.u.")  # BIN=fail/total 비율(0~1)
             for ts in _TARGETS_BY_CATEGORY.values() for t in ts}
 
 
@@ -180,11 +180,11 @@ def fact_table() -> pd.DataFrame:
                 c, sd0 = _center(key)
                 feats[key] = c + (feats[key] - c) * 0.40
                 feats[key] += 0.8 * sd0 if cat_feat_vals.get("EQP_CH") == "CH2" else -0.8 * sd0
-        # 2) target — BIN은 driver feature에 약한 선형 의존 + 노이즈, 그 외는 무작위
+        # 2) target — BIN은 fail chip / total 비율(0~1). driver feature에 약한 의존 + 노이즈, clip[0,1].
         dep = 3.0 * (feats[driver_key] - driver_c) if driver_key else 0.0
-        bin_noise = rng_t.normal(0, 18, size=len(bin_targets))  # BIN 노이즈 일괄(601회 개별 호출 회피)
-        target_vals = {t: float(500 + dep + bin_noise[i]) for i, t in enumerate(bin_targets)}
-        target_vals.update({t: float(rng_t.normal(50, 30)) for t in other_targets})
+        bin_noise = rng_t.normal(0, 0.015, size=len(bin_targets))  # BIN 노이즈 일괄(601회 개별 호출 회피)
+        target_vals = {t: float(min(1.0, max(0.0, 0.05 + 0.001 * dep + bin_noise[i]))) for i, t in enumerate(bin_targets)}
+        target_vals.update({t: float(rng_t.normal(50, 30)) for t in other_targets})  # MSR/AWACS는 실무 시 검토
 
         # 3) row 생성
         for si, fab in enumerate(fab_steps):
