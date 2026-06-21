@@ -7,7 +7,11 @@ export default defineConfig({
   server: {
     // true = 0.0.0.0 바인딩 → 같은 LAN/내부망의 팀원이 http://<내IP>:5173 으로 접속 가능.
     // (미설정 시 localhost 전용이라 외부 접속 불가) 실행 시 Vite가 Network URL을 자동 출력한다.
+    // IP는 어디에도 하드코딩하지 않는다 — 실행 머신의 현재 IP를 자동 감지한다.
     host: true,
+    // mDNS 호스트네임(예: my-mac.local) 접속 허용 → IP가 DHCP로 바뀌어도 이름은 고정.
+    // (IP·localhost 접속은 기본 허용이라 .local만 추가) 보안: .local은 같은 망에서만 해석됨.
+    allowedHosts: ['.local'],
     port: 5173,
     proxy: {
       // /api 로 시작하는 요청을 백엔드(8000)로 전달 → 브라우저 CORS 회피.
