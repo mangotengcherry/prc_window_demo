@@ -161,6 +161,14 @@ python validate_data.py
 
 초록불(`✓ 전부 통과`)이면 대시보드에 바로 쓸 수 있다.
 
+### 단위 테스트 (analytics 회귀 보호)
+```bash
+pip install -r requirements-dev.txt   # pytest
+pytest -q                              # backend/ 에서
+```
+- `tests/test_analytics.py` — 통계 헬퍼(Cpk σ·관리한계·drift·회귀추정·외삽)와 compute_* 계약(필드/식별자/forecast 신뢰가드)을 검증.
+- 데이터 소스를 교체했다면 `validate_data.py` 통과 후 `pytest`도 돌려 분석 계약이 안 깨졌는지 확인할 것.
+
 ---
 
 ## 6. 자주 막히는 곳

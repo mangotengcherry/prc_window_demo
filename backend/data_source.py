@@ -23,9 +23,9 @@ _LAG_DAYS = _LAG_MAX                  # 명목 lag(provenance "~N일 이전 기�
 _N_WAFERS = 1600
 
 _TARGETS_BY_CATEGORY = {
-    "BIN": ["BIN0131", "BIN0132", "BIN0133"],
-    "MSR": ["MSR0001", "MSR0002"],
-    "AWACS": ["AWACS01"],
+    "BIN": [f"BIN{i:04d}" for i in range(601)],  # BIN0000~BIN0600 (실 구성)
+    "MSR": ["MSR0001", "MSR0002"],   # 구성은 실무 적용 시 검토
+    "AWACS": ["AWACS01"],            # 구성은 실무 적용 시 검토
 }
 _EDS_STEPS = ["EDS_M", "EDS_P"]
 
@@ -125,11 +125,15 @@ def fact_table() -> pd.DataFrame:
     eds_tkout_time, observed, + feature 컬럼(feature_key명) + target 컬럼 + 분할 컬럼.
     """
     rng = np.random.default_rng(42)
+    rng_t = np.random.default_rng(123)  # target 노이즈 전용 — feature 실현이 target 개수에 흔들리지 않게 분리
     cat = feature_catalog()
     dcs = dc_spec()
     num_keys = cat.loc[cat["data_type"] == "numeric", "feature_key"].tolist()
     fab_steps = list(dict.fromkeys(cat["fab_step"]))
     all_targets = [t for ts in _TARGETS_BY_CATEGORY.values() for t in ts]
+    bin_targets = [t for t in all_targets if t.startswith("BIN")]
+    other_targets = [t for t in all_targets if not t.startswith("BIN")]
+    nan_targets = {t: np.nan for t in all_targets}  # 미관측 행 target 일괄(601+개 개별 대입 회피)
     lines = ["AAAA", "BBBB", "CCCC", "DDDD"]
     products = ["AAEQ", "BBCR", "CCAK", "DDGQ"]
 
@@ -163,8 +167,9 @@ def fact_table() -> pd.DataFrame:
             feats[driver_key] += (70 - days_ago) * 0.5
         # 2) target — BIN은 driver feature에 약한 선형 의존 + 노이즈, 그 외는 무작위
         dep = 3.0 * (feats[driver_key] - driver_c) if driver_key else 0.0
-        target_vals = {t: (float(500 + dep + rng.normal(0, 18)) if t.startswith("BIN")
-                           else float(rng.normal(50, 30))) for t in all_targets}
+        bin_noise = rng_t.normal(0, 18, size=len(bin_targets))  # BIN 노이즈 일괄(601회 개별 호출 회피)
+        target_vals = {t: float(500 + dep + bin_noise[i]) for i, t in enumerate(bin_targets)}
+        target_vals.update({t: float(rng_t.normal(50, 30)) for t in other_targets})
 
         # 3) row 생성
         for si, fab in enumerate(fab_steps):
@@ -179,7 +184,6 @@ def fact_table() -> pd.DataFrame:
             for key in num_keys:
                 if key.split("|")[1] == fab:  # 이 fab_step의 feature만 값
                     row[key] = feats[key]
-            for t in all_targets:
-                row[t] = target_vals[t] if observed else np.nan  # observed-only
+            row.update(target_vals if observed else nan_targets)  # observed-only
             rows.append(row)
     return pd.DataFrame(rows)
