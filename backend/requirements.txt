@@ -3,4 +3,5 @@ fastapi==0.115.6
 uvicorn[standard]==0.34.0
 pandas==2.2.3
 numpy==1.26.4
+scipy==1.17.1          # 상관 유의성 p-value(t-분포) — driver 랭킹 다중비교(FDR) 보정
 pydantic==2.10.4

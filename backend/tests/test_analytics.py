@@ -15,6 +15,7 @@ import data as D
 from analytics import (
     _within_std, _control_limits, _drift, _fit_estimate,
     _with_target_groups, _apply_selection, _apply_target_date, _pooled_within_std,
+    _corr_pvalue, _bh_fdr,
 )
 
 # 데모에서 파생(하드코딩 회피) — 첫 fab_step의 numeric feature들
@@ -46,12 +47,19 @@ def test_within_std():
     assert _within_std([]) is None
 
 
-def test_control_limits():
-    cl = _control_limits(pd.Series([1, 2, 3, 4, 5]))
-    sd = float(pd.Series([1, 2, 3, 4, 5]).std())  # ddof=1
-    assert cl["sigma"] == pytest.approx(sd, abs=1e-3)   # 결과는 4자리 반올림
-    assert cl["ucl"] == pytest.approx(3 + 3 * sd, abs=1e-3)
-    assert cl["lcl"] == pytest.approx(3 - 3 * sd, abs=1e-3)
+def test_control_limits_within_imr():
+    # 관리한계 σ는 단기(군내 I-MR) = MR̄/1.128. [1..5]의 MR̄=1 → within=1/1.128.
+    s = pd.Series([1, 2, 3, 4, 5])
+    cl = _control_limits(s)
+    within = 1.0 / 1.128
+    assert cl["method"] == "within(I-MR)"
+    assert cl["sigma"] == pytest.approx(within, abs=1e-3)             # 단기 σ
+    assert cl["sigma_overall"] == pytest.approx(float(s.std()), abs=1e-3)  # 전체 σ도 노출
+    assert cl["ucl"] == pytest.approx(3 + 3 * within, abs=1e-3)
+    assert cl["lcl"] == pytest.approx(3 - 3 * within, abs=1e-3)
+    # 상수열 → MR̄=0 → 전체 std로 fallback(둘 다 0이라 한계=평균)
+    cf = _control_limits(pd.Series([7.0, 7.0, 7.0]))
+    assert cf["method"] == "overall" and cf["sigma"] == 0
     assert _control_limits(pd.Series([1])) is None   # n<2
 
 
@@ -64,6 +72,24 @@ def test_drift_flagged_and_none():
     # 완만 — flag 안 됨
     flat = [[i, 100.0 + (i % 2) * 0.1] for i in range(25)]
     assert _drift(flat)["flagged"] is False
+
+
+def test_corr_pvalue():
+    # r=0.8, n=5 → 양측 p≈0.104 (비유의), r=0.5·n=400 → 매우 유의
+    assert _corr_pvalue(0.8, 5) == pytest.approx(0.1041, abs=2e-3)
+    assert _corr_pvalue(0.5, 400) < 1e-10
+    assert _corr_pvalue(0.0, 50) == pytest.approx(1.0, abs=1e-6)   # 무상관 → p=1
+    assert _corr_pvalue(0.9, 2) is None                            # df<1
+
+
+def test_bh_fdr_monotone_and_order():
+    # 입력 순서 보존 + 단조성. p 큰 값은 q≥p, 작은 값은 보정
+    q = _bh_fdr([0.01, 0.04, 0.03, 0.005, None])
+    assert q[4] is None                       # None은 유지
+    present = [q[i] for i in (3, 0, 2, 1)]     # p 오름차순 인덱스
+    assert present == sorted(present)          # q 단조 증가
+    assert all(qi <= 1.0 for qi in present)
+    assert _bh_fdr([None, None]) == [None, None]
 
 
 def test_with_target_groups_min_count_requires_all():
@@ -175,6 +201,11 @@ def test_compute_drivers_ranked():
     drivers = out[0]["drivers"]
     assert drivers and drivers[0]["abs"] >= drivers[-1]["abs"]   # |corr| 내림차순
     assert drivers[0]["feature"] == DRIVER                       # driver가 최상위
+    top = drivers[0]
+    assert top["n"] >= analytics.MIN_N                           # 소표본 컷
+    assert top["p_value"] is not None and top["q_value"] is not None
+    assert 0.0 <= top["q_value"] <= 1.0
+    assert top["q_value"] < 0.1                                  # 진짜 driver는 FDR 후에도 유의
 
 
 def test_compute_interaction_identity():
