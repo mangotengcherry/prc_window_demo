@@ -20,11 +20,20 @@ export function inSpecPct(mean, std, lower, upper) {
   return normCdf((upper - mean) / std) - normCdf((lower - mean) / std)
 }
 
+// 공정능력 진단 임계값 (팀 표준에 맞게 커스텀 가능). incapable < capable < over.
+export const DEFAULT_CAP_THRESHOLDS = { incapable: 1.0, capable: 1.33, over: 2.0, driftRatio: 1.3, offFrac: 0.25 }
+
+// Cpk 색 밴드 — 임계값 기준. '' | bad | warn | good
+export function cpkBand(v, t = DEFAULT_CAP_THRESHOLDS) {
+  if (v == null) return ''
+  return v < t.incapable ? 'bad' : v < t.capable ? 'warn' : 'good'
+}
+
 // Cpk/Ppk 종합 진단 — 능력 수준 × 안정성(σ_overall/σ_within) × 중심(Cp 대비).
-//  핵심: Cpk/Ppk = σ_overall/σ_within → 1보다 벌어지면 군간 변동(drift) 큼.
+//  핵심: Cpk/Ppk = σ_overall/σ_within → 임계 이상 벌어지면 군간 변동(drift) 큼.
 //        Cp(중심 무시 잠재능력)는 좋은데 Cpk 낮으면 → 치우침(재센터링).
 // 반환: { cpk, ppk, cp, ratio, unstable, offcenter, state, label, msg } | null
-export function capabilityDiagnosis(mean, sWithin, sOverall, lower, upper) {
+export function capabilityDiagnosis(mean, sWithin, sOverall, lower, upper, t = DEFAULT_CAP_THRESHOLDS) {
   if (mean == null || sWithin == null || sOverall == null || lower == null || upper == null) return null
   if (sWithin <= 0 || sOverall <= 0 || upper <= lower) return null
   const margin = Math.min(upper - mean, mean - lower)
@@ -34,16 +43,16 @@ export function capabilityDiagnosis(mean, sWithin, sOverall, lower, upper) {
   const half = (upper - lower) / 2
   const off = Math.abs(mean - (upper + lower) / 2) / half    // 0 중심 ~ 1 한계
   const ratio = cpkV / ppkV                                  // = σ_overall/σ_within (≥1 일반)
-  const unstable = ratio >= 1.3                              // 장기 산포가 단기 대비 30%+ ↑
-  const offcenter = off >= 0.25 && cp >= 1.33                // 산포는 충분한데 치우침
+  const unstable = ratio >= t.driftRatio                     // 장기 산포가 단기 대비 임계% ↑
+  const offcenter = off >= t.offFrac && cp >= t.capable       // 산포는 충분한데 치우침
   const worst = Math.min(cpkV, ppkV)
   const r1 = ratio.toFixed(1), cpkS = cpkV.toFixed(2), ppkS = ppkV.toFixed(2)
   let state, label, msg
   // drift(단기 능력은 충분한데 장기 산포가 커 Ppk가 떨어짐)를 먼저 판정 — Ppk<1.0이어도 능력부족이 아니라 drift
-  if (unstable && cpkV >= 1.33 && ppkV < 1.33) {
-    state = 'drift'; label = 'drift 의심'
-    msg = `단기 능력은 충분(Cpk ${cpkS})하나 장기 산포가 큼(σ_overall≈${r1}×σ_within, Ppk ${ppkS}) → data drift/시프트 의심. 안정화·SPC 강화.`
-  } else if (worst < 1.0) {
+  if (unstable && cpkV >= t.capable && ppkV < t.capable) {
+    state = 'drift'; label = '산포 drift'
+    msg = `단기 능력은 충분(Cpk ${cpkS})하나 장기 산포가 큼(σ_overall≈${r1}×σ_within, Ppk ${ppkS}) → 산포 기반 data drift/시프트 의심. 안정화·SPC 강화. (시계열 '평균 drift'와는 별개 신호)`
+  } else if (worst < t.incapable) {
     if (offcenter) {
       state = 'offcenter'; label = '중심 치우침'
       msg = `산포는 충분(Cp ${cp.toFixed(2)})하나 중심이 한계로 치우침 → 재센터링하면 Cpk 개선.`
@@ -53,10 +62,10 @@ export function capabilityDiagnosis(mean, sWithin, sOverall, lower, upper) {
         ? ` + 장기 불안정(σ_overall≈${r1}×σ_within) → 안정화 후 산포 저감/spec 재검토.`
         : ` (안정적) → spec 적정성 재검토 또는 산포 저감.`)
     }
-  } else if (worst >= 2.0) {
+  } else if (worst >= t.over) {
     state = 'over'; label = '과잉(여유)'
     msg = `Cpk ${cpkS}·Ppk ${ppkS} 모두 높음 → spec 여유 큼. spec 타이트닝(조기 검출) 또는 관리 완화 검토.`
-  } else if (worst < 1.33) {
+  } else if (worst < t.capable) {
     state = 'marginal'; label = '능력 경계'
     msg = `Cpk ${cpkS}·Ppk ${ppkS} 경계 → 산포/센터 개선으로 마진 확보.` + (offcenter ? ' 중심 치우침 존재.' : '')
   } else {

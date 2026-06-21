@@ -7,7 +7,7 @@ import DataTable from './components/DataTable.vue'
 // 보조 분석 패널(차트 3개) — 결과가 있을 때만 필요 → 지연 로드로 초기 번들·파싱 분리
 const InteractionPanel = defineAsyncComponent(() => import('./components/InteractionPanel.vue'))
 import { fetchColumns, fetchXFeatureOptions, fetchBinned, fetchTimeseries, fetchTable, fetchDrivers, downloadRaw } from './api/client.js'
-import { cpk, capabilityDiagnosis } from './stats.js'
+import { cpk, capabilityDiagnosis, cpkBand, DEFAULT_CAP_THRESHOLDS } from './stats.js'
 import { SERIES } from './palette.js'
 import { queryId, shareUrl, condFromUrl } from './share.js'
 
@@ -21,6 +21,14 @@ const timeseries = shallowRef(null)
 const tableRows = shallowRef([])
 const driversData = shallowRef([]) // 인사이트 2: target별 영향 요인 랭킹
 const specByCombo = reactive({})
+
+// 공정능력 진단 임계값 — 사용자 커스텀(localStorage 보존). 팀 표준에 맞게 조정.
+const CAP_LS = 'capThresholds'
+const capThresholds = reactive({ ...DEFAULT_CAP_THRESHOLDS })
+try { Object.assign(capThresholds, JSON.parse(localStorage.getItem(CAP_LS) || '{}')) } catch { /* noop */ }
+const showCapSettings = ref(false)
+function saveCapThresholds() { try { localStorage.setItem(CAP_LS, JSON.stringify(capThresholds)) } catch { /* noop */ } }
+function resetCapThresholds() { Object.assign(capThresholds, DEFAULT_CAP_THRESHOLDS); saveCapThresholds() }
 
 const status = ref('initial') // initial | loading | loaded | empty | error
 const errorMsg = ref('')
@@ -177,7 +185,7 @@ const kpis = computed(() => {
   })
   return { combos: rs.length, obs: timeseries.value?.n_total ?? null, worstCpkDc: wDc, worstCpkUser: wU, thinN }
 })
-function cpkClass(v) { return v == null ? '' : (v < 1 ? 'bad' : (v < 1.33 ? 'warn' : 'good')) }
+function cpkClass(v) { return cpkBand(v, capThresholds) }
 
 // 인사이트 5: 조건(분할값) 비교 랭킹 — (feature×target)별로 분할값을 target 평균순 정렬 + Cpk
 const conditionCompare = computed(() => {
@@ -205,10 +213,17 @@ const capability = computed(() => {
   const minN = columns.value?.min_n ?? 10
   return Object.values(m).map((e) => {
     const r = e.row
-    const dx = capabilityDiagnosis(r.x_value, r.x_std_within, r.x_std, r.dc_lower, r.dc_upper)
+    const dx = capabilityDiagnosis(r.x_value, r.x_std_within, r.x_std, r.dc_lower, r.dc_upper, capThresholds)
     const cpkDc = dx ? dx.cpk : cpk(r.x_value, r.x_std_within, r.dc_lower, r.dc_upper)
-    return { feature: e.feature, name: e.name, n: e.n, dx, cpkDc, thin: (e.n ?? 0) < minN }
+    return { feature: e.feature, name: e.name, n: e.n, dx, cpkDc, thin: (e.n ?? 0) < minN,
+             meanDrift: tsDriftByFeature.value[e.feature] || null }
   }).filter((e) => e.cpkDc != null).sort((a, b) => a.cpkDc - b.cpkDc)
+})
+// 시계열 평균 drift(μ 이동) — feature명으로 매핑. 공정능력의 산포 drift(σ)와 교차 표시.
+const tsDriftByFeature = computed(() => {
+  const m = {}
+  ;(timeseries.value?.features || []).forEach((f) => { if (f.drift?.flagged && !m[f.name]) m[f.name] = f.drift })
+  return m
 })
 
 // 인사이트 1: lag 기반 관리이탈 사전 예측 — 미확보 wafer 추정이 target 관리한계를 벗어날 예측 수 + 추정 평균 이동(σ)
@@ -392,14 +407,29 @@ async function downloadCsv() {
       </section>
 
       <section v-if="status === 'loaded' && capability.length" class="drivers-area">
-        <h3 class="pane-title">공정능력 진단 (Cpk·Ppk) <small>DC spec 기준 · 약한 순. Cpk≫Ppk=drift / 둘다 낮음=능력부족 / 둘다 높음=spec 여유 (마우스=조치)</small></h3>
+        <h3 class="pane-title">공정능력 진단 (Cpk·Ppk)
+          <small>DC spec 기준 · 약한 순. Cpk≫Ppk=산포 drift / 둘다 낮음=능력부족 / 둘다 높음=spec 여유 (마우스=조치)</small>
+          <button class="capset-btn" :class="{ on: showCapSettings }" @click="showCapSettings = !showCapSettings" title="진단 임계값 사용자 설정">⚙ 임계값</button>
+        </h3>
+        <div v-if="showCapSettings" class="capset">
+          <label>위험 &lt; <input type="number" step="0.01" min="0" v-model.number="capThresholds.incapable" @change="saveCapThresholds" /></label>
+          <label>충분 ≥ <input type="number" step="0.01" min="0" v-model.number="capThresholds.capable" @change="saveCapThresholds" /></label>
+          <label>과잉 ≥ <input type="number" step="0.01" min="0" v-model.number="capThresholds.over" @change="saveCapThresholds" /></label>
+          <label>drift 비율 ≥ <input type="number" step="0.05" min="1" v-model.number="capThresholds.driftRatio" @change="saveCapThresholds" /></label>
+          <button class="capset-reset" @click="resetCapThresholds">기본값</button>
+          <span class="capset-hint">drift 비율 = σ_overall/σ_within. 설정은 브라우저에 저장됩니다.</span>
+        </div>
         <div class="capgrid2">
           <div v-for="c in capability" :key="c.feature" class="caprow2" :title="c.dx ? c.dx.msg : (c.name + ' · n=' + c.n)">
             <span class="dname">{{ c.name }}</span>
             <span class="cpp">Cpk <b :class="cpkClass(c.dx ? c.dx.cpk : c.cpkDc)">{{ (c.dx ? c.dx.cpk : c.cpkDc).toFixed(2) }}</b></span>
             <span class="cpp">Ppk <b :class="cpkClass(c.dx ? c.dx.ppk : null)">{{ c.dx ? c.dx.ppk.toFixed(2) : '-' }}</b></span>
-            <span v-if="c.thin" class="dxtag dx-thin">표본 부족</span>
-            <span v-else-if="c.dx" class="dxtag" :class="'dx-' + c.dx.state">{{ c.dx.label }}</span>
+            <span class="dxtags">
+              <span v-if="c.thin" class="dxtag dx-thin">표본 부족</span>
+              <span v-else-if="c.dx" class="dxtag" :class="'dx-' + c.dx.state">{{ c.dx.label }}</span>
+              <span v-if="c.meanDrift" class="dxtag dx-mean"
+                :title="'시계열 평균이 최근 ' + (c.meanDrift.shift >= 0 ? '+' : '') + c.meanDrift.shift + 'σ 이동(평균/레벨 drift). 산포 drift와 별개 신호 — 함께 뜨면 추세+불안정.'">평균 drift {{ c.meanDrift.direction === 'up' ? '↑' : '↓' }}</span>
+            </span>
           </div>
         </div>
       </section>
@@ -428,7 +458,7 @@ async function downloadCsv() {
                   :multi="r.multi" :members="r.members"
                   :estimate="r.estimate" :show-estimate="showEstimate"
                   :spec="specByCombo[r.key]" :dc-spec="r.dcSpec" :thin="r.thin"
-                  :min-n="columns?.min_n ?? 10" :sampled="timeseries?.sampled"
+                  :min-n="columns?.min_n ?? 10" :sampled="timeseries?.sampled" :cap-thresholds="capThresholds"
                   :first="i === 0" :selection="selection" @brush="onBrush" />
       </section>
 
@@ -511,14 +541,15 @@ async function downloadCsv() {
 .cpp { color: var(--text-2); white-space: nowrap; }
 .cpp b { font-weight: 700; color: var(--text); }
 .cpp b.good { color: #166534; } .cpp b.warn { color: #854d0e; } .cpp b.bad { color: #991b1b; }
-.dxtag { font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 999px; white-space: nowrap; justify-self: start; }
-.dx-ok { color: #166534; background: #dcfce7; }
-.dx-marginal { color: #854d0e; background: #fef9c3; }
-.dx-drift { color: #9a3412; background: #ffedd5; border: 1px solid #fdba74; }
-.dx-incapable { color: #991b1b; background: #fee2e2; }
-.dx-offcenter { color: #6b21a8; background: #f3e8ff; }
-.dx-over { color: #1e40af; background: #dbeafe; }
-.dx-thin { color: #6b7280; background: #f3f4f6; }
+.dxtags { display: inline-flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+.capset-btn { float: right; font-size: 10px; font-weight: 600; color: var(--text-2); background: #fff; border: 1px solid var(--border); border-radius: 999px; padding: 1px 9px; cursor: pointer; text-transform: none; letter-spacing: 0; }
+.capset-btn.on { color: var(--accent); border-color: var(--accent); background: var(--accent-weak); }
+.capset { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 8px 12px; margin: 2px 0 4px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; font-size: 11px; }
+.capset label { display: inline-flex; align-items: center; gap: 4px; color: var(--text-2); font-weight: 600; }
+.capset input { width: 52px; padding: 3px 6px; font-size: 11px; border: 1px solid var(--border); border-radius: 6px; background: #fff; outline: none; }
+.capset input:focus { border-color: var(--accent); box-shadow: var(--ring); }
+.capset-reset { font-size: 11px; font-weight: 600; color: var(--accent); background: #fff; border: 1px solid var(--accent); border-radius: 6px; padding: 3px 9px; cursor: pointer; }
+.capset-hint { color: var(--text-2); font-weight: 500; }
 .cpkv { font-size: 11px; font-weight: 700; text-align: right; }
 .cpkv.good { color: #166534; } .cpkv.warn { color: #854d0e; } .cpkv.bad { color: #991b1b; }
 .ctab { width: 100%; border-collapse: collapse; font-size: 12px; }
