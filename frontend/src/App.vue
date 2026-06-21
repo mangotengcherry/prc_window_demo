@@ -7,7 +7,7 @@ import DataTable from './components/DataTable.vue'
 // 보조 분석 패널(차트 3개) — 결과가 있을 때만 필요 → 지연 로드로 초기 번들·파싱 분리
 const InteractionPanel = defineAsyncComponent(() => import('./components/InteractionPanel.vue'))
 import { fetchColumns, fetchXFeatureOptions, fetchBinned, fetchTimeseries, fetchTable, fetchDrivers, downloadRaw } from './api/client.js'
-import { cpk } from './stats.js'
+import { cpk, capabilityDiagnosis } from './stats.js'
 import { SERIES } from './palette.js'
 import { queryId, shareUrl, condFromUrl } from './share.js'
 
@@ -193,15 +193,22 @@ const conditionCompare = computed(() => {
     .filter((x) => x.items.length > 1)
 })
 
-// 인사이트 3: 공정능력(Cpk) 요약 — feature가 DC spec 대비 안정적인지(약한 순). Cpk(DC)는 feature 단위.
+// 인사이트 3: 공정능력 진단 — feature별 Cpk·Ppk + 진단(능력×안정성×중심). Cpk(DC)는 feature 단위.
 const capability = computed(() => {
   const m = {}
   tableRows.value.forEach((r) => {
-    const c = cpk(r.x_value, r.x_std_within, r.dc_lower, r.dc_upper)
-    if (c == null) return
-    if (!m[r.x_feature] || (r.n || 0) > m[r.x_feature].n) m[r.x_feature] = { feature: r.x_feature, name: r.x_feature_display_name || r.x_feature, cpkDc: c, n: r.n }
+    if (r.x_value == null || r.dc_lower == null || r.dc_upper == null) return
+    if (!m[r.x_feature] || (r.n || 0) > (m[r.x_feature].n || 0)) {
+      m[r.x_feature] = { feature: r.x_feature, name: r.x_feature_display_name || r.x_feature, row: r, n: r.n }
+    }
   })
-  return Object.values(m).sort((a, b) => a.cpkDc - b.cpkDc)
+  const minN = columns.value?.min_n ?? 10
+  return Object.values(m).map((e) => {
+    const r = e.row
+    const dx = capabilityDiagnosis(r.x_value, r.x_std_within, r.x_std, r.dc_lower, r.dc_upper)
+    const cpkDc = dx ? dx.cpk : cpk(r.x_value, r.x_std_within, r.dc_lower, r.dc_upper)
+    return { feature: e.feature, name: e.name, n: e.n, dx, cpkDc, thin: (e.n ?? 0) < minN }
+  }).filter((e) => e.cpkDc != null).sort((a, b) => a.cpkDc - b.cpkDc)
 })
 
 // 인사이트 1: lag 기반 관리이탈 사전 예측 — 미확보 wafer 추정이 target 관리한계를 벗어날 예측 수 + 추정 평균 이동(σ)
@@ -385,12 +392,14 @@ async function downloadCsv() {
       </section>
 
       <section v-if="status === 'loaded' && capability.length" class="drivers-area">
-        <h3 class="pane-title">공정능력(Cpk) 요약 <small>feature가 DC spec 대비 얼마나 안정적인지 — 약한 순 (Cpk&lt;1 위험)</small></h3>
-        <div class="capgrid">
-          <div v-for="c in capability" :key="c.feature" class="caprow" :title="c.name + ' · Cpk(DC) ' + c.cpkDc.toFixed(2) + ' · n=' + c.n">
+        <h3 class="pane-title">공정능력 진단 (Cpk·Ppk) <small>DC spec 기준 · 약한 순. Cpk≫Ppk=drift / 둘다 낮음=능력부족 / 둘다 높음=spec 여유 (마우스=조치)</small></h3>
+        <div class="capgrid2">
+          <div v-for="c in capability" :key="c.feature" class="caprow2" :title="c.dx ? c.dx.msg : (c.name + ' · n=' + c.n)">
             <span class="dname">{{ c.name }}</span>
-            <div class="dbar"><div class="cfill" :class="cpkClass(c.cpkDc)" :style="{ width: Math.min(100, c.cpkDc / 2 * 100) + '%' }"></div></div>
-            <span class="cpkv" :class="cpkClass(c.cpkDc)">{{ c.cpkDc.toFixed(2) }}</span>
+            <span class="cpp">Cpk <b :class="cpkClass(c.dx ? c.dx.cpk : c.cpkDc)">{{ (c.dx ? c.dx.cpk : c.cpkDc).toFixed(2) }}</b></span>
+            <span class="cpp">Ppk <b :class="cpkClass(c.dx ? c.dx.ppk : null)">{{ c.dx ? c.dx.ppk.toFixed(2) : '-' }}</b></span>
+            <span v-if="c.thin" class="dxtag dx-thin">표본 부족</span>
+            <span v-else-if="c.dx" class="dxtag" :class="'dx-' + c.dx.state">{{ c.dx.label }}</span>
           </div>
         </div>
       </section>
@@ -497,10 +506,19 @@ async function downloadCsv() {
 .dval { font-size: 11px; font-weight: 700; color: var(--accent); text-align: right; }
 .dval.neg { color: #b45309; }
 .dnone { font-size: 11px; color: var(--text-2); margin: 4px 0 0; }
-.capgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 6px 18px; }
-.caprow { display: grid; grid-template-columns: 130px 1fr 40px; align-items: center; gap: 8px; cursor: help; }
-.cfill { height: 100%; border-radius: 999px; }
-.cfill.good { background: #16a34a; } .cfill.warn { background: #d97706; } .cfill.bad { background: #dc2626; }
+.capgrid2 { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 5px 18px; }
+.caprow2 { display: grid; grid-template-columns: minmax(96px, 1.4fr) 62px 62px auto; align-items: center; gap: 8px; cursor: help; font-size: 12px; }
+.cpp { color: var(--text-2); white-space: nowrap; }
+.cpp b { font-weight: 700; color: var(--text); }
+.cpp b.good { color: #166534; } .cpp b.warn { color: #854d0e; } .cpp b.bad { color: #991b1b; }
+.dxtag { font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 999px; white-space: nowrap; justify-self: start; }
+.dx-ok { color: #166534; background: #dcfce7; }
+.dx-marginal { color: #854d0e; background: #fef9c3; }
+.dx-drift { color: #9a3412; background: #ffedd5; border: 1px solid #fdba74; }
+.dx-incapable { color: #991b1b; background: #fee2e2; }
+.dx-offcenter { color: #6b21a8; background: #f3e8ff; }
+.dx-over { color: #1e40af; background: #dbeafe; }
+.dx-thin { color: #6b7280; background: #f3f4f6; }
 .cpkv { font-size: 11px; font-weight: 700; text-align: right; }
 .cpkv.good { color: #166534; } .cpkv.warn { color: #854d0e; } .cpkv.bad { color: #991b1b; }
 .ctab { width: 100%; border-collapse: collapse; font-size: 12px; }
