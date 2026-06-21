@@ -5,9 +5,13 @@ import vue from '@vitejs/plugin-vue'
 export default defineConfig({
   plugins: [vue()],
   server: {
+    // true = 0.0.0.0 바인딩 → 같은 LAN/내부망의 팀원이 http://<내IP>:5173 으로 접속 가능.
+    // (미설정 시 localhost 전용이라 외부 접속 불가) 실행 시 Vite가 Network URL을 자동 출력한다.
+    host: true,
     port: 5173,
     proxy: {
-      // /api 로 시작하는 요청을 백엔드(8000)로 전달 → 브라우저 CORS 회피
+      // /api 로 시작하는 요청을 백엔드(8000)로 전달 → 브라우저 CORS 회피.
+      // 프록시는 호스트 머신에서 실행되므로 백엔드는 localhost(8000)에 그대로 두면 됨(직접 노출 불필요).
       '/api': 'http://localhost:8000',
     },
   },
