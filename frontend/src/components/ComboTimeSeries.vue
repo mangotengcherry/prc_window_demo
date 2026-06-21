@@ -6,6 +6,7 @@ import { computed } from 'vue'
 import VChart from 'vue-echarts'
 import '../echarts.js'
 import { PALETTE as C, HEAT_RAMP } from '../palette.js'
+import { fmtNum } from '../stats.js'
 
 const props = defineProps({
   target: { type: Object, default: null },   // 단일: { observed_points, control_limits, ... }
@@ -182,7 +183,7 @@ const meanCompare = computed(() => {
   if (obs == null || !pts || !pts.length) return null
   const pred = pts.reduce((s, p) => s + p[1], 0) / pts.length  // 추정 점(다이아몬드)들의 평균
   const shift = props.estimate?.forecast?.shift ?? null
-  return { obs, pred, delta: +(pred - obs).toFixed(2), shift, up: pred >= obs }
+  return { obs, pred, delta: pred - obs, shift, up: pred >= obs }
 })
 // 두 구간 평균을 각 구간 위 수평 세그먼트로 그려 직접 비교 (관측: 좌측 회색 / 추정: gap영역, 높으면 빨강)
 function meanSegmentData() {
@@ -195,12 +196,12 @@ function meanSegmentData() {
   const hi = mc.up ? HEAT_RAMP[3] : grey  // 팀 컨벤션: 높으면 빨강, 낮으면 회색
   const chip = (text, color, bold) => ({ show: true, position: 'middle', formatter: text, fontSize: 9,
     fontWeight: bold ? 700 : 600, color, backgroundColor: '#fff', padding: [1, 3], borderRadius: 2 })
-  const d = (mc.delta >= 0 ? '+' : '') + mc.delta
+  const d = (mc.delta >= 0 ? '+' : '') + fmtNum(mc.delta)
   return [
     [{ coord: [ms(x0), mc.obs], lineStyle: { color: grey, type: 'dashed', width: 1.5 },
-       label: chip(`관측 평균 ${mc.obs.toFixed(1)}`, grey, false) }, { coord: [ms(gs), mc.obs] }],
+       label: chip(`관측 평균 ${fmtNum(mc.obs)}`, grey, false) }, { coord: [ms(gs), mc.obs] }],
     [{ coord: [ms(gs), mc.pred], lineStyle: { color: hi, type: 'solid', width: 2.5 },
-       label: chip(`추정 평균 ${mc.pred.toFixed(1)} (${d})`, hi, true) }, { coord: [ms(ge), mc.pred] }],
+       label: chip(`추정 평균 ${fmtNum(mc.pred)} (${d})`, hi, true) }, { coord: [ms(ge), mc.pred] }],
   ]
 }
 

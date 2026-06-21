@@ -8,6 +8,14 @@ function erf(x) {
 }
 export function normCdf(z) { return 0.5 * (1 + erf(z / Math.SQRT2)) }
 
+// 값 크기에 맞춰 소수 자릿수 자동 — 비율(0~1)부터 큰 수까지 보기 좋게.
+export function fmtNum(v) {
+  if (v == null) return '-'
+  const a = Math.abs(v)
+  if (a === 0) return '0'
+  return a < 1 ? v.toFixed(3) : a < 10 ? v.toFixed(2) : v.toFixed(1)
+}
+
 // Cpk = min(USU-μ, μ-USL) / (3σ)  — feature 공정능력
 export function cpk(mean, std, lower, upper) {
   if (mean == null || std == null || std <= 0 || lower == null || upper == null) return null
