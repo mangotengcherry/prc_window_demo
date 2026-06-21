@@ -37,6 +37,17 @@ body {
 
 input, select, button { font-family: inherit; }
 
+/* 공정능력 진단 태그 — 공용(App 패널 + ComboRow). state별 색 */
+.dxtag { font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 999px; white-space: nowrap; }
+.dx-ok { color: #166534; background: #dcfce7; }
+.dx-marginal { color: #854d0e; background: #fef9c3; }
+.dx-drift { color: #9a3412; background: #ffedd5; border: 1px solid #fdba74; }
+.dx-incapable { color: #991b1b; background: #fee2e2; }
+.dx-offcenter { color: #6b21a8; background: #f3e8ff; }
+.dx-over { color: #1e40af; background: #dbeafe; }
+.dx-thin { color: #6b7280; background: #f3f4f6; }
+.dx-mean { color: #0f766e; background: #ccfbf1; }
+
 /* 얇고 은은한 스크롤바 */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.18); border-radius: 8px; border: 2px solid transparent; background-clip: content-box; }

@@ -5,7 +5,7 @@
 import { ref, computed, watch } from 'vue'
 import WindowChart from './WindowChart.vue'
 import ComboTimeSeries from './ComboTimeSeries.vue'
-import { cpk, inSpecPct } from '../stats.js'
+import { cpk, inSpecPct, capabilityDiagnosis, cpkBand, DEFAULT_CAP_THRESHOLDS } from '../stats.js'
 
 const props = defineProps({
   combo: { type: Object, required: true },        // { x_feature, x_feature_display_name, y_target, ... }
@@ -21,6 +21,7 @@ const props = defineProps({
   thin: { type: Boolean, default: false },        // 표본 부족(신뢰 낮음)
   minN: { type: Number, default: 10 },
   sampled: { type: Boolean, default: false },
+  capThresholds: { type: Object, default: () => DEFAULT_CAP_THRESHOLDS },
   first: { type: Boolean, default: false },        // 첫 행에만 안내 칩 표시(반복 노이즈 방지)
   selection: { type: Array, default: null },       // linked-brushing 선택 구간 밴드
 })
@@ -79,7 +80,16 @@ const tsGroups = computed(() => props.members.map((m) => ({ label: m.cfv, color:
 
 const f2 = (v) => (v == null ? '-' : v.toFixed(2))
 const pct = (v) => (v == null ? '-' : (v * 100).toFixed(1) + '%')
-const ck = (v) => (v == null ? '' : (v < 1 ? 'bad' : (v < 1.33 ? 'warn' : 'good')))
+const ck = (v) => cpkBand(v, props.capThresholds)
+// 공정능력 진단(능력×안정성×중심) — DC / user spec 각각. cap-strip에 태그로.
+const dxDc = computed(() => {
+  const s = props.stats || {}, d = props.dcSpec || {}
+  return capabilityDiagnosis(s.x_value, s.x_std_within, s.x_std, d.lower, d.upper, props.capThresholds)
+})
+const dxU = computed(() => {
+  const s = props.stats || {}, u = props.spec || {}
+  return hasUser.value ? capabilityDiagnosis(s.x_value, s.x_std_within, s.x_std, u.lower, u.upper, props.capThresholds) : null
+})
 </script>
 
 <template>
@@ -104,12 +114,14 @@ const ck = (v) => (v == null ? '' : (v < 1 ? 'bad' : (v < 1.33 ? 'warn' : 'good'
       <span class="cg" title="DC spec 기준 — user 입력 없이 항상 산출. Cpk=단기 σ(MR/1.128), Ppk=전체 σ">vs DC</span>
       <span>Cpk <b :class="ck(cap.cpkDc)">{{ f2(cap.cpkDc) }}</b></span>
       <span>Ppk <b :class="ck(cap.ppkDc)">{{ f2(cap.ppkDc) }}</b></span>
+      <span v-if="dxDc" class="dxtag" :class="'dx-' + dxDc.state" :title="dxDc.msg">{{ dxDc.label }}</span>
       <template v-if="hasUser">
         <span class="div">|</span>
         <span class="cg" title="user spec 기준">vs user</span>
         <span>Cpk <b :class="ck(cap.cpkU)">{{ f2(cap.cpkU) }}</b></span>
         <span>Ppk <b :class="ck(cap.ppkU)">{{ f2(cap.ppkU) }}</b></span>
         <span title="in-spec 비율(정규근사)">in-spec <b>{{ pct(cap.inspecU) }}</b></span>
+        <span v-if="dxU" class="dxtag" :class="'dx-' + dxU.state" :title="dxU.msg">{{ dxU.label }}</span>
       </template>
       <span v-else class="hint">· user spec 입력 시 user 기준 capability 표시</span>
     </div>
