@@ -118,6 +118,12 @@ cd frontend && npm install && npm run dev   # http://localhost:5173
 6. **provenance + 공유 URL**: 출처·기간·표본·쿼리ID 한 줄 + lag 주의(R5), `?q=`(base64) 직렬화로 화면 재현. (`42ce45b`)
 7. **linked brushing**: 시계열 기간 brush → 해당 wafer로 window·table 재집계(시계열은 전체). (`cf118c3`)
 
+### 최근 확장 (M2+)
+8. **사용성**: 모든 scatter 점 hover=wafer 식별 툴팁(root_lot_id·wafer_id·tkout), raw CSV 다운로드(BOM), 교호 순위표↔heatmap 강조 연동, 관측 vs 추정 구간 평균 비교 세그먼트. (`2d26c96`,`7f85bc6`)
+9. **공정능력 진단**: feature별 Cpk·Ppk 상태 분류(능력부족/산포 drift/과잉/중심 치우침)+조치 메시지. 임계값·**Cpk 부분군(EQP_CH 등)** ⚙ 커스텀(localStorage). 산포 drift(σ)↔평균 drift(μ) 교차표시. (`030cf54`,`910c0aa`,`da9be28`)
+10. **BIN=0~1 fail ratio**로 데모 정정 + **"관리이탈 예상" UI 제거**(백엔드 forecast는 `/api/timeseries` 유지). 비율 스케일 표시 포맷(`fmtNum`). (`169c8db`)
+- 백엔드 테스트: `backend/tests/test_analytics.py`(pytest 19) + `validate_data.py`. (`6873a1e`)
+
 ### 통계 방법론
 - **Cpk**(군내 σ=합리적 부분군[EQP/chamber/lot]별 풀드, ⚙에서 선택·localStorage; 미지정 time I-MR=MR/1.128) vs **Ppk**(전체 σ). σ_overall²=within²+between² → Cpk≫Ppk=부분군 간(설비/챔버) 차이. 진단 패널(능력×안정성[산포 drift]×중심), 시계열은 평균 drift 별도. DC/user spec 기준. in-spec%는 정규근사 Φ.
 - 색맹 안전(Okabe-Ito) 팔레트(`palette.js`), 분할 오버레이는 `SERIES`, 히트맵/scatter value는 red/grey `HEAT_RAMP`(팀 컨벤션: 높음=빨강·낮음=회색).
@@ -125,4 +131,4 @@ cd frontend && npm install && npm run dev   # http://localhost:5173
 ### 함정 메모
 - ECharts는 모듈을 `use()`로 등록해야 함(`echarts.js`) — Heatmap/VisualMap/Brush/Toolbox/MarkArea 누락 시 조용히 미렌더.
 - brush ISO는 tz-aware(`Z`) → df(tz-naive) 비교 전 `tz_localize(None)` 필요.
-- 민감 문서(hr_manage/project_manage/agents/claude/info.md)는 `.gitignore`로 **공개 repo에서 제외 유지**(사용자 확인됨).
+- 민감 문서(hr_manage/project_manage/agents/claude/info.md + PROJECT_REVIEW_FOR_CLAUDE.md)는 `.gitignore`로 **공개 repo에서 제외 유지**(사용자 확인됨). 커밋 전 `git diff --cached --name-only`로 확인.
