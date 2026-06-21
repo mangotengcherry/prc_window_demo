@@ -6,6 +6,7 @@ from typing import List, Optional
 
 import numpy as np
 import pandas as pd
+from scipy import stats as _spstats
 
 import data as D
 
@@ -207,10 +208,19 @@ def req_max_combos() -> int:
 
 # ---------------- /api/timeseries ----------------
 def _control_limits(values: pd.Series):
+    """I-chart 관리한계(±3σ). σ는 단기(군내) σ = 이동범위 MR̄/1.128 우선 —
+    추세·특이원인에 오염되는 전체 std 대신 SPC I-MR 정신에 맞춤(Cpk의 within σ와 일관).
+    MR 산출 불가(상수/단일점)면 전체 std로 fallback. 입력은 시간순 정렬 가정."""
     if len(values) < 2:
         return None
-    mu, sigma = float(values.mean()), float(values.std())
-    return {"ucl": round(mu + 3 * sigma, 4), "lcl": round(mu - 3 * sigma, 4), "sigma": round(sigma, 4)}
+    mu = float(values.mean())
+    s_overall = float(values.std())
+    s_within = _within_std(values)               # MR̄/1.128 (단기 σ)
+    use_within = s_within is not None and s_within > 0
+    sigma = s_within if use_within else s_overall
+    return {"ucl": round(mu + 3 * sigma, 4), "lcl": round(mu - 3 * sigma, 4),
+            "sigma": round(sigma, 4), "sigma_overall": round(s_overall, 4),
+            "method": "within(I-MR)" if use_within else "overall"}
 
 
 def _drift(points) -> Optional[dict]:
@@ -219,8 +229,10 @@ def _drift(points) -> Optional[dict]:
     if n < 20:
         return None
     vals = np.array([p[1] for p in points], dtype=float)
-    sd = float(vals.std())
-    if sd == 0:
+    # 분모는 단기(군내) σ = MR̄/1.128 — 시프트 자체를 포함하는 전체 std로 나누면
+    # 변동 큰 시계열일수록 같은 시프트가 작게 보여 flag 판정이 일관성을 잃는다.
+    sd = _within_std(vals)
+    if not sd:
         return None
     k = max(5, n // 5)
     shift = round((float(vals[-k:].mean()) - float(vals[:-k].mean())) / sd, 2)
@@ -394,8 +406,36 @@ def compute_table(req) -> dict:
 
 
 # ---------------- /api/drivers (인사이트 2) ----------------
+def _corr_pvalue(r: float, n: int) -> Optional[float]:
+    """Pearson r의 양측 p-value. t = r·√((n−2)/(1−r²)), df=n−2 (귀무: 무상관)."""
+    if r is None or n < 3:
+        return None
+    rr = max(min(float(r), 0.999999), -0.999999)
+    df = n - 2
+    t = rr * np.sqrt(df / (1 - rr * rr))
+    return float(2 * _spstats.t.sf(abs(t), df))
+
+
+def _bh_fdr(pvals: List[Optional[float]]) -> List[Optional[float]]:
+    """Benjamini-Hochberg FDR q-value. 입력 순서대로 반환(None은 None 유지).
+    같은 target에 대해 다수 feature를 검정할 때 우연 상관(다중비교)을 보정."""
+    present = [(i, p) for i, p in enumerate(pvals) if p is not None]
+    q: List[Optional[float]] = [None] * len(pvals)
+    m = len(present)
+    if m == 0:
+        return q
+    present.sort(key=lambda t: t[1])          # p 오름차순
+    running = 1.0
+    for rank in range(m, 0, -1):              # 큰 p부터 단조 보정
+        i, p = present[rank - 1]
+        running = min(running, p * m / rank)
+        q[i] = round(min(running, 1.0), 4)
+    return q
+
+
 def compute_drivers(req) -> dict:
-    """선택 target별로 같은 fab_step의 numeric feature를 |corr|(관측 wafer 기준)로 정렬."""
+    """선택 target별로 같은 fab_step의 numeric feature를 |corr|(관측 wafer 기준)로 정렬.
+    각 상관에 유의성 p-value와 다중비교 보정 q-value(BH FDR)를 동봉 — 우연 상관 식별용."""
     df = _with_target_groups(D.load_dataframe(), getattr(req, "y_target_groups", None))
     base = _filter_rows(df, line_id=req.line_id, product=req.product,
                         fab_step=req.fab_step, date_range=req.date_range)
@@ -412,13 +452,19 @@ def compute_drivers(req) -> dict:
                 if key not in base.columns:
                     continue
                 s = base[base[key].notna() & base[yt].notna()]
-                if len(s) < 5:
+                n = len(s)
+                if n < MIN_N:        # n<5 → MIN_N(=10): 소표본 우연 상관 배제
                     continue
                 c = np.corrcoef(s[key], s[yt])[0, 1]
                 if np.isnan(c):
                     continue
                 drivers.append({"feature": key, "display_name": fr["display_name"],
-                                "corr": round(float(c), 3), "abs": round(abs(float(c)), 3), "n": int(len(s))})
+                                "corr": round(float(c), 3), "abs": round(abs(float(c)), 3),
+                                "n": int(n), "p_value": _corr_pvalue(c, n)})
+            for d, q in zip(drivers, _bh_fdr([d["p_value"] for d in drivers])):
+                d["q_value"] = q                                   # BH 보정(원시 p로 산출)
+                if d["p_value"] is not None:
+                    d["p_value"] = round(d["p_value"], 6)          # 표시용 반올림은 q 산출 후
             drivers.sort(key=lambda d: -d["abs"])
         out.append({"target": yt, "drivers": drivers})
     return {"targets": out}

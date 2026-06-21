@@ -2,7 +2,7 @@
 
 분석 레이어(7-1)·시간기준·추정 슬롯을 포함하되, M0에서 채우지 않는 값은 Optional로 둔다.
 """
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel
 
@@ -143,6 +143,41 @@ class TimeBasis(BaseModel):
     expected_target_lag_days: int
 
 
+# 분석 레이어 계약 — 명시적 서브모델(이전 Dict[str, Any] → 타입·docstring drift 방지, /docs 노출)
+class ControlLimits(BaseModel):
+    ucl: float
+    lcl: float
+    sigma: float            # 관리한계 산출 σ — 단기(군내 I-MR) 우선
+    sigma_overall: float    # 전체(long-term) σ — 참고
+    method: str             # "within(I-MR)" | "overall"
+
+
+class FitSummary(BaseModel):
+    slope: float
+    intercept: float
+    r2: Optional[float] = None
+    n: int
+    extrap: float = 0.0     # 추정 X가 관측 범위 밖 비율
+
+
+class Forecast(BaseModel):
+    oos: int                # 추정 y가 관리한계 초과한 미확보 wafer 수
+    n: int
+    ucl: float
+    lcl: float
+    shift: float            # 추정 평균이 관측 평균 대비 σ 이동
+    mean_pred: float
+    r2: Optional[float] = None
+    extrap: float = 0.0
+    low_conf: bool          # 저R²/외삽 → 참고용 강등
+
+
+class Drift(BaseModel):
+    shift: float            # 최근(마지막 20%) 평균이 기준 대비 단기 σ 이동
+    direction: str
+    flagged: bool
+
+
 class TimePoint(BaseModel):
     time: str
     value: float
@@ -159,9 +194,9 @@ class TargetSeries(BaseModel):
     category_feature_value: Optional[str] = None
     observed_points: List[TimePoint]
     estimated_points: List[TimePoint] = []
-    fit_summary: Optional[Dict[str, Any]] = None
+    fit_summary: Optional[FitSummary] = None
     avg: Optional[float] = None
-    control_limits: Optional[Dict[str, float]] = None
+    control_limits: Optional[ControlLimits] = None
 
 
 class FeatureSeries(BaseModel):
@@ -172,8 +207,8 @@ class FeatureSeries(BaseModel):
     points: list  # [[iso, value], ...]
     point_ids: list = []  # [[root_lot_id, wafer_id], ...] points와 동일 순서 (툴팁용)
     avg: Optional[float] = None
-    control_limits: Optional[Dict[str, float]] = None
-    drift: Optional[Dict[str, Any]] = None  # {shift, direction, flagged} — 추세 감지
+    control_limits: Optional[ControlLimits] = None
+    drift: Optional[Drift] = None  # 추세 감지
 
 
 class EstimateSeries(BaseModel):
@@ -183,8 +218,8 @@ class EstimateSeries(BaseModel):
     category_feature_value: Optional[str] = None
     points: list  # [[iso, value], ...] — 미관측 wafer의 추정 y
     point_ids: list = []  # [[root_lot_id, wafer_id], ...] points와 동일 순서 (툴팁용)
-    fit_summary: Optional[Dict[str, Any]] = None  # {slope, intercept, r2, n}
-    forecast: Optional[Dict[str, Any]] = None     # {oos, n, ucl, lcl} — 관리한계 초과 예측 수
+    fit_summary: Optional[FitSummary] = None
+    forecast: Optional[Forecast] = None     # 관리한계 초과 예측 수 + 신뢰가드
 
 
 class TimeseriesResponse(BaseModel):
@@ -266,6 +301,8 @@ class DriverItem(BaseModel):
     corr: float      # 부호 포함 상관
     abs: float       # |corr| (정렬 기준)
     n: int
+    p_value: Optional[float] = None   # 상관 유의성(양측)
+    q_value: Optional[float] = None   # BH FDR 보정 — q<0.1이면 다중비교 후에도 유의
 
 
 class TargetDrivers(BaseModel):

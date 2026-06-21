@@ -208,6 +208,8 @@ const kpis = computed(() => {
   return { combos: rs.length, obs: timeseries.value?.n_total ?? null, worstCpkDc: wDc, worstCpkUser: wU, thinN }
 })
 function cpkClass(v) { return cpkBand(v, capThresholds) }
+// driver 상관이 다중비교(BH FDR) 보정 후에도 유의한가(q<0.1). q 없으면(구버전/소표본) 판단 보류.
+function isSigDriver(d) { return d.q_value != null && d.q_value < 0.1 }
 
 // 인사이트 5: 조건(분할값) 비교 랭킹 — (feature×target)별로 분할값을 target 평균순 정렬 + Cpk
 const conditionCompare = computed(() => {
@@ -265,14 +267,12 @@ function specFor(xf, yt, cfv) {
 const provenance = computed(() => {
   const c = lastCond.value
   if (!c) return null
-  const tb = timeseries.value?.time_basis
   return {
     source: `demo · ${c.line_id}/${c.product} · ${c.category}/${c.eds_step} · ${c.fab_step}`,
     fabRange: `${c.date_range.start_date} ~ ${c.date_range.end_date}`,
     edsRange: c.target_date_range ? `${c.target_date_range.start_date} ~ ${c.target_date_range.end_date}` : '-',
     n: timeseries.value?.n_total ?? '-',
     qid: queryId(c),
-    lagDays: tb?.expected_target_lag_days ?? null,
   }
 })
 // linked brushing — 시계열 brush 구간으로 window·table 재집계 (시계열은 전체 유지)
@@ -391,14 +391,15 @@ async function downloadCsv() {
       </section>
 
       <section v-if="status === 'loaded' && driversData.length" class="drivers-area">
-        <h3 class="pane-title">영향 요인 (driver) 랭킹 <small>선택 target에 영향이 큰 feature 순 (|corr|, 관측 wafer)</small></h3>
+        <h3 class="pane-title">영향 요인 (driver) 랭킹 <small>선택 target에 영향이 큰 feature 순 (|corr|, 관측 wafer) · <b>흐림 = 다중비교(FDR) 후 비유의(q≥0.1)</b></small></h3>
         <div class="dgrid">
           <div v-for="t in driversData" :key="t.target" class="dcard">
             <div class="dtitle">{{ t.target }}</div>
-            <div v-for="d in t.drivers.slice(0, 5)" :key="d.feature" class="drow" :title="d.display_name + ' · corr ' + d.corr + ' · n=' + d.n">
+            <div v-for="d in t.drivers.slice(0, 5)" :key="d.feature" class="drow" :class="{ insig: !isSigDriver(d) }"
+                 :title="d.display_name + ' · corr ' + d.corr + ' · n=' + d.n + (d.q_value != null ? ' · q=' + d.q_value + (isSigDriver(d) ? ' (유의)' : ' (비유의 — 우연 가능)') : '')">
               <span class="dname">{{ d.display_name }}</span>
               <div class="dbar"><div class="dfill" :class="{ neg: d.corr < 0 }" :style="{ width: Math.max(2, d.abs * 100) + '%' }"></div></div>
-              <span class="dval" :class="{ neg: d.corr < 0 }">{{ d.corr >= 0 ? '+' : '' }}{{ d.corr }}</span>
+              <span class="dval" :class="{ neg: d.corr < 0 }">{{ d.corr >= 0 ? '+' : '' }}{{ d.corr }}<span v-if="d.q_value != null && !isSigDriver(d)" class="ns">ns</span></span>
             </div>
             <p v-if="!t.drivers.length" class="dnone">표본 부족</p>
           </div>
@@ -469,7 +470,7 @@ async function downloadCsv() {
 
       <section v-if="tableRows.length" class="table-area">
         <h3 class="pane-title">요약 테이블</h3>
-        <DataTable :rows="tableRows" :spec-for="specFor" :target-groups="targetGroupDefs" />
+        <DataTable :rows="tableRows" :spec-for="specFor" :target-groups="targetGroupDefs" :cap-thresholds="capThresholds" />
       </section>
 
       <section v-if="status === 'loaded' && lastCond" class="ix-area">
@@ -504,7 +505,6 @@ async function downloadCsv() {
 .prov > span { padding: 0 14px; border-left: 1px solid var(--border); line-height: 1.4; }
 .prov > span:first-child { padding-left: 0; border-left: none; }
 .prov b { font-weight: 600; color: var(--text-2); text-transform: uppercase; font-size: 10px; letter-spacing: .04em; margin-right: 5px; }
-.prov .lag { color: #92400e; background: #fef3c7; padding: 1px 8px; border-radius: 999px; font-weight: 600; cursor: help; border-left: none; margin-left: 4px; }
 .selbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 14px 32px 0; padding: 8px 14px; background: var(--accent-weak); border: 1px solid var(--accent); border-radius: 10px; font-size: 12.5px; color: var(--text); }
 .selbar b { color: var(--accent); }
 .selbar .reagg { color: var(--accent); font-weight: 600; }
@@ -532,7 +532,9 @@ async function downloadCsv() {
 .dgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
 .dcard { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-sm); padding: 12px 14px; }
 .dtitle { font-size: 13px; font-weight: 600; margin-bottom: 8px; }
-.drow { display: grid; grid-template-columns: 110px 1fr 44px; align-items: center; gap: 8px; margin-bottom: 5px; cursor: help; }
+.drow { display: grid; grid-template-columns: 110px 1fr 56px; align-items: center; gap: 8px; margin-bottom: 5px; cursor: help; }
+.drow.insig { opacity: .42; }  /* FDR 후 비유의 — 우연 상관일 수 있어 시각적으로 강등 */
+.ns { font-size: 8px; font-weight: 700; color: #6b7280; background: #e5e7eb; padding: 0 3px; border-radius: 3px; margin-left: 3px; vertical-align: middle; }
 .dname { font-size: 11px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dbar { height: 9px; background: var(--surface-2); border-radius: 999px; overflow: hidden; }
 .dfill { height: 100%; background: var(--accent); border-radius: 999px; }

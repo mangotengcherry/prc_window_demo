@@ -1,12 +1,13 @@
 <script setup>
 // 요약 테이블 (M0): 행 = (fab_step × x_feature × y_target × 분할값). metro 메타 + n + USL/USU/DSL/DSU + user/DC range.
 import { computed } from 'vue'
-import { cpk as cpkFn, inSpecPct } from '../stats.js'
+import { cpk as cpkFn, inSpecPct, cpkBand, DEFAULT_CAP_THRESHOLDS } from '../stats.js'
 
 const props = defineProps({
   rows: { type: Array, default: () => [] },
   specFor: { type: Function, default: () => ({}) }, // (xFeatureKey, yTarget, cfValue) => { lower, upper }
   targetGroups: { type: Array, default: () => [] }, // 합산 그룹 정의 [{ name, sources, agg }]
+  capThresholds: { type: Object, default: () => DEFAULT_CAP_THRESHOLDS }, // Cpk 색 임계값(사용자 커스텀과 일치)
 })
 
 function groupOf(yt) { return props.targetGroups.find((g) => g.name === yt) || null }
@@ -29,7 +30,8 @@ function ppkU(r) { const u = us(r); return cpkFn(r.x_value, r.x_std, u.lower, u.
 function cpkDc(r) { return cpkFn(r.x_value, r.x_std_within, r.dc_lower, r.dc_upper) }
 function ppkDc(r) { return cpkFn(r.x_value, r.x_std, r.dc_lower, r.dc_upper) }
 function inspecU(r) { const u = us(r); return inSpecPct(r.x_value, r.x_std, u.lower, u.upper) }
-function cpkClass(v) { return v == null ? '' : (v < 1 ? 'bad' : (v < 1.33 ? 'warn' : 'good')) }
+// 색 밴드는 공유 cpkBand 사용 — 1.0/1.33 하드코딩 제거, '진단 설정'의 커스텀 임계값과 일치
+function cpkClass(v) { return cpkBand(v, props.capThresholds) }
 </script>
 
 <template>
