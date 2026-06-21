@@ -165,6 +165,18 @@ def fact_table() -> pd.DataFrame:
         days_ago = (_NOW - wafer_start).days
         if driver_key and days_ago < 70:
             feats[driver_key] += (70 - days_ago) * 0.5
+        # 데모: Cpk/Ppk 진단이 다양한 상태를 보이도록 일부 비-driver feature에 프로파일 부여.
+        # 값만 변경(rng 미소비) → driver/forecast 시나리오 불변. OVL=산포↓(과잉), TEMP=시간드리프트(Cpk≫Ppk).
+        for key in num_keys:
+            if key == driver_key:
+                continue
+            item = key.split("|")[3]
+            if item == "OVL_X":
+                c = _center(key)[0]
+                feats[key] = c + (feats[key] - c) * 0.30
+            elif item == "TEMP_SENSOR_01":
+                c = _center(key)[0]
+                feats[key] = c + (feats[key] - c) * 0.40 + 6.0 * np.sin(days_ago / 11.0)
         # 2) target — BIN은 driver feature에 약한 선형 의존 + 노이즈, 그 외는 무작위
         dep = 3.0 * (feats[driver_key] - driver_c) if driver_key else 0.0
         bin_noise = rng_t.normal(0, 18, size=len(bin_targets))  # BIN 노이즈 일괄(601회 개별 호출 회피)
