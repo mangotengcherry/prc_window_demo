@@ -1,6 +1,6 @@
 <script setup>
 // 레이아웃 + 상태 보유(부모). [Sidebar] + [조건요약/상태] + [조합별 ComboRow] + [Table]
-import { ref, shallowRef, reactive, computed, onMounted, defineAsyncComponent } from 'vue'
+import { ref, shallowRef, reactive, computed, watch, onMounted, defineAsyncComponent } from 'vue'
 import Sidebar from './components/Sidebar.vue'
 import ComboRow from './components/ComboRow.vue'
 import DataTable from './components/DataTable.vue'
@@ -29,6 +29,27 @@ try { Object.assign(capThresholds, JSON.parse(localStorage.getItem(CAP_LS) || '{
 const showCapSettings = ref(false)
 function saveCapThresholds() { try { localStorage.setItem(CAP_LS, JSON.stringify(capThresholds)) } catch { /* noop */ } }
 function resetCapThresholds() { Object.assign(capThresholds, DEFAULT_CAP_THRESHOLDS); saveCapThresholds() }
+
+// Cpk within σ 부분군(rational subgroup) — EQP/chamber/lot. Ppk는 항상 전체 σ.
+const cpkSubgroup = ref(localStorage.getItem('cpkSubgroup') ?? 'EQP_CH')
+const cpkSubgroupOptions = computed(() => {
+  const cats = columns.value?.category_features || []
+  const pref = ['EQP_CH', 'EQP', 'EQP_MODEL', 'PPID', 'ECO'].filter((k) => cats.includes(k))
+  const rest = cats.filter((k) => !pref.includes(k))
+  return ['', 'root_lot_id', ...pref, ...rest]  // ''=시간 I-MR
+})
+const cpkSubgroupLabel = (v) => (v ? (v === 'root_lot_id' ? 'root_lot' : v) : '시간 I-MR')
+watch(cpkSubgroup, (v) => {
+  try { localStorage.setItem('cpkSubgroup', v) } catch { /* noop */ }
+  if (lastCond.value) refetchTable()
+})
+async function refetchTable() {
+  try {
+    const tbl = await fetchTable({ ...lastCond.value, cpk_subgroup: cpkSubgroup.value || null,
+      selection: selection.value ? { time_range: selection.value } : null })
+    tableRows.value = tbl.rows
+  } catch (e) { errorMsg.value = e.message || '요약표 재집계 실패' }
+}
 
 const status = ref('initial') // initial | loading | loaded | empty | error
 const errorMsg = ref('')
@@ -66,7 +87,8 @@ async function onDraw(cond) {
   errorMsg.value = ''
   selection.value = null // 새 분석은 brush 선택 초기화
   try {
-    const [b, t, tbl, dr] = await Promise.all([fetchBinned(cond), fetchTimeseries(cond), fetchTable(cond), fetchDrivers(cond)])
+    const [b, t, tbl, dr] = await Promise.all([fetchBinned(cond), fetchTimeseries(cond),
+      fetchTable({ ...cond, cpk_subgroup: cpkSubgroup.value || null }), fetchDrivers(cond)])
     binned.value = b
     timeseries.value = t
     tableRows.value = tbl.rows
@@ -285,7 +307,8 @@ async function reaggregate() {
   const seq = ++reaggSeq
   reaggregating.value = true
   try {
-    const cond = { ...lastCond.value, selection: selection.value ? { time_range: selection.value } : null }
+    const cond = { ...lastCond.value, cpk_subgroup: cpkSubgroup.value || null,
+      selection: selection.value ? { time_range: selection.value } : null }
     const [b, tbl] = await Promise.all([fetchBinned(cond), fetchTable(cond)])
     if (seq !== reaggSeq) return // 더 최신 brush 요청이 있으면 폐기(stale 방지)
     binned.value = b
@@ -408,16 +431,22 @@ async function downloadCsv() {
 
       <section v-if="status === 'loaded' && capability.length" class="drivers-area">
         <h3 class="pane-title">공정능력 진단 (Cpk·Ppk)
-          <small>DC spec 기준 · 약한 순. Cpk≫Ppk=산포 drift / 둘다 낮음=능력부족 / 둘다 높음=spec 여유 (마우스=조치)</small>
-          <button class="capset-btn" :class="{ on: showCapSettings }" @click="showCapSettings = !showCapSettings" title="진단 임계값 사용자 설정">⚙ 임계값</button>
+          <small>DC spec · 약한 순. Cpk≫Ppk=산포 drift / 둘다 낮음=능력부족 / 둘다 높음=spec 여유 · <b>Cpk within={{ cpkSubgroupLabel(cpkSubgroup) }}</b> (마우스=조치)</small>
+          <button class="capset-btn" :class="{ on: showCapSettings }" @click="showCapSettings = !showCapSettings" title="진단 임계값·부분군 설정">⚙ 진단 설정</button>
         </h3>
         <div v-if="showCapSettings" class="capset">
+          <label class="capset-sg">Cpk 부분군
+            <select v-model="cpkSubgroup">
+              <option v-for="o in cpkSubgroupOptions" :key="o" :value="o">{{ cpkSubgroupLabel(o) }}</option>
+            </select>
+          </label>
+          <span class="capset-div">|</span>
           <label>위험 &lt; <input type="number" step="0.01" min="0" v-model.number="capThresholds.incapable" @change="saveCapThresholds" /></label>
           <label>충분 ≥ <input type="number" step="0.01" min="0" v-model.number="capThresholds.capable" @change="saveCapThresholds" /></label>
           <label>과잉 ≥ <input type="number" step="0.01" min="0" v-model.number="capThresholds.over" @change="saveCapThresholds" /></label>
           <label>drift 비율 ≥ <input type="number" step="0.05" min="1" v-model.number="capThresholds.driftRatio" @change="saveCapThresholds" /></label>
           <button class="capset-reset" @click="resetCapThresholds">기본값</button>
-          <span class="capset-hint">drift 비율 = σ_overall/σ_within. 설정은 브라우저에 저장됩니다.</span>
+          <span class="capset-hint">Cpk=군내(within) σ — 합리적 부분군(EQP/chamber/lot). Ppk=전체 σ. Cpk≫Ppk면 부분군 간(설비 등) 차이 큼.</span>
         </div>
         <div class="capgrid2">
           <div v-for="c in capability" :key="c.feature" class="caprow2" :title="c.dx ? c.dx.msg : (c.name + ' · n=' + c.n)">
@@ -548,6 +577,10 @@ async function downloadCsv() {
 .capset label { display: inline-flex; align-items: center; gap: 4px; color: var(--text-2); font-weight: 600; }
 .capset input { width: 52px; padding: 3px 6px; font-size: 11px; border: 1px solid var(--border); border-radius: 6px; background: #fff; outline: none; }
 .capset input:focus { border-color: var(--accent); box-shadow: var(--ring); }
+.capset select { padding: 3px 6px; font-size: 11px; border: 1px solid var(--border); border-radius: 6px; background: #fff; outline: none; font-weight: 600; color: var(--text); }
+.capset select:focus { border-color: var(--accent); box-shadow: var(--ring); }
+.capset-sg { color: var(--accent); }
+.capset-div { color: var(--border); }
 .capset-reset { font-size: 11px; font-weight: 600; color: var(--accent); background: #fff; border: 1px solid var(--accent); border-radius: 6px; padding: 3px 9px; cursor: pointer; }
 .capset-hint { color: var(--text-2); font-weight: 500; }
 .cpkv { font-size: 11px; font-weight: 700; text-align: right; }

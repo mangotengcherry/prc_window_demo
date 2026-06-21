@@ -14,7 +14,7 @@ import analytics
 import data as D
 from analytics import (
     _within_std, _control_limits, _drift, _fit_estimate,
-    _with_target_groups, _apply_selection, _apply_target_date,
+    _with_target_groups, _apply_selection, _apply_target_date, _pooled_within_std,
 )
 
 # 데모에서 파생(하드코딩 회피) — 첫 fab_step의 numeric feature들
@@ -22,6 +22,7 @@ FAB = D.FAB_STEPS[0]
 NUM_FEATS = [k for k in D.numeric_feature_keys() if k.split("|")[1] == FAB]
 DRIVER = NUM_FEATS[0]          # target 의존 driver(CD_MEAN)
 NOISE = NUM_FEATS[1] if len(NUM_FEATS) > 1 else NUM_FEATS[0]  # 저상관 feature
+TEMP = next((k for k in NUM_FEATS if "TEMP" in k), NUM_FEATS[-1])  # 챔버 mismatch feature
 TGT = D.TARGETS_BY_CATEGORY["BIN"][0]  # BIN0000
 
 
@@ -32,7 +33,7 @@ def base_req(**over):
     d = dict(line_id=D.LINE_IDS[0], product=D.PRODUCTS[0], category="BIN",
              eds_step=D.EDS_STEPS[0], date_range=dr, target_date_range=None,
              fab_step=FAB, x_features=[DRIVER], y_targets=[TGT],
-             y_target_groups=[], category_feature=None, selection=None, bins=10)
+             y_target_groups=[], category_feature=None, selection=None, bins=10, cpk_subgroup=None)
     d.update(over)
     return NS(**d)
 
@@ -192,6 +193,24 @@ def test_raw_frame_has_identity_columns():
     for c in ("root_lot_id", "wafer_id", "observed", DRIVER, TGT):
         assert c in df.columns
     assert len(df) > 0
+
+
+def test_pooled_within_std():
+    # 두 군 [1,2,3]·[11,12,13] — 군내는 작고(σ_within=1) 군간은 큼
+    sw = _pooled_within_std([1, 2, 3, 11, 12, 13], ['a', 'a', 'a', 'b', 'b', 'b'])
+    assert sw == pytest.approx(1.0, abs=1e-3)
+    assert sw < float(pd.Series([1, 2, 3, 11, 12, 13]).std())   # within << overall(군간차)
+    assert _pooled_within_std([1, 2, 3], ['a', 'b', 'c']) is None  # 전부 singleton → 분리 불가
+
+
+def test_compute_table_cpk_subgroup():
+    # EQP_CH 부분군 vs time I-MR — method 라벨 + within ≤ overall + 챔버 mismatch가 부분군에서 드러남
+    eqp = analytics.compute_table(base_req(x_features=[TEMP], cpk_subgroup="EQP_CH"))["rows"][0]
+    imr = analytics.compute_table(base_req(x_features=[TEMP], cpk_subgroup=None))["rows"][0]
+    assert eqp["x_within_method"] == "EQP_CH" and imr["x_within_method"] == "time(I-MR)"
+    assert eqp["x_std_within"] <= eqp["x_std"] + 1e-9            # 풀드 within ≤ overall(분산분해)
+    # 챔버 간 차이가 EQP_CH within에선 빠지므로 time-IMR보다 작음 (mismatch 드러남)
+    assert eqp["x_std_within"] < imr["x_std_within"]
 
 
 def test_validate_source_clean():

@@ -111,7 +111,7 @@ const dxU = computed(() => {
 
     <!-- 분리 모드 capability -->
     <div v-if="!multi" class="cap-strip">
-      <span class="cg" title="DC spec 기준 — user 입력 없이 항상 산출. Cpk=단기 σ(MR/1.128), Ppk=전체 σ">vs DC</span>
+      <span class="cg" :title="'DC spec 기준 — 항상 산출. Cpk within σ = ' + (stats?.x_within_method || '-') + ' 부분군, Ppk = 전체 σ'">vs DC</span>
       <span>Cpk <b :class="ck(cap.cpkDc)">{{ f2(cap.cpkDc) }}</b></span>
       <span>Ppk <b :class="ck(cap.ppkDc)">{{ f2(cap.ppkDc) }}</b></span>
       <span v-if="dxDc" class="dxtag" :class="'dx-' + dxDc.state" :title="dxDc.msg">{{ dxDc.label }}</span>
