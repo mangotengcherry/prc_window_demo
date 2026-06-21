@@ -24,11 +24,13 @@ main.py          ← FastAPI 라우팅 — 수정 불필요
 
 ---
 
-## 2. 빠른 시작 (3단계)
+## 2. 빠른 시작
 
+0. (최초 1회) 의존성 설치: `pip install -r requirements.txt`
+   — pandas·numpy·**scipy**(driver 상관 유의성·FDR) + fastapi·uvicorn 포함.
 1. `data_source.py`의 provider 함수들을 회사 데이터 조회로 교체 (아래 §4).
 2. 검증: `python validate_data.py` → **✓ 전부 통과** 확인 (스키마·표본·분석 smoke).
-3. 실행: `uvicorn main:app --reload` → 대시보드(`frontend`)에서 사용.
+3. 실행: `uvicorn main:app --reload`. 프론트 실행·팀원 LAN 공유는 루트 `README.md` 참고.
 
 문제가 있으면 `validate_data.py`가 **무엇이 틀렸는지** 콕 집어준다.
 
@@ -180,9 +182,21 @@ pytest -q                              # backend/ 에서
 | `'fab_track_out_time'는 datetime 형이어야 함` | `pd.to_datetime(...)`으로 변환 |
 | 분할 드롭다운에 인자가 안 보임 | `category_feature_names()`가 반환하는 컬럼명이 fact_table에 있어야 함 |
 | Cpk가 다 비어 있음 | feature 표본 < 2이거나 dc_spec에 해당 feature 없음 |
-| 최근 구간 window가 항상 비는 게 정상? | ✅ lag 때문. provenance에 "window는 ~N일 이전 기준" 안내가 뜬다 |
+| 최근 구간 window가 항상 비는 게 정상? | ✅ lag(`target_lag_days`) 때문. 최근 wafer는 EDS 미확보(추정 y 대상)라 window·표·Cpk에서 빠진다 |
 
 ---
 
-문의: 구조는 `data.py`(파생 규칙)·`analytics.py`(분석식) 주석 참고. 분석식(Cpk/Ppk/추정/추천 제거 등)은
-프로젝트 `MEMORY.md` §11 참고.
+## 7. 참고 — 최근 분석 업데이트 (데이터 계약에는 영향 없음)
+
+아래는 분석 산출물 해석에 참고할 변경점이다. **`data_source.py` 계약과 무관**하므로,
+데이터만 갈아끼우면 그대로 동작한다(별도 작업 불필요).
+
+- **driver 랭킹에 유의성**: 상관마다 p-value + 다중비교 보정 q-value(Benjamini-Hochberg FDR)를 함께 반환.
+  화면에선 **q ≥ 0.1(우연 가능)** 항목을 흐리게 + `ns` 표시 → 우연 상관을 공정 윈도우 결정에서 배제.
+  (계산에 `scipy` 필요 — §2의 requirements에 포함)
+- **관리한계·drift σ 일관화**: 시계열 UCL/LCL과 drift 판정의 σ를 **단기(군내 I-MR) = MR̄/1.128** 기준으로 통일
+  (Cpk의 within σ와 동일 정신). 응답 `control_limits`에 `sigma`(단기)·`sigma_overall`(전체)·`method` 동시 노출.
+- 위 변경은 **표본/데이터에 따라 자동 산출**되므로 실데이터에서도 추가 설정이 없다.
+
+문의: 구조는 `data.py`(파생 규칙)·`analytics.py`(분석식) 주석 참고. 분석식(Cpk/Ppk/추정/FDR/관리한계 σ 등)은
+프로젝트 `MEMORY.md` 참고.
