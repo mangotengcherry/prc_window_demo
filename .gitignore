@@ -38,3 +38,6 @@ demo.gif
 png_*.png
 v_*.png
 ts_*.png
+
+# Superpowers visual brainstorming sessions
+.superpowers/
