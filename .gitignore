@@ -41,3 +41,6 @@ ts_*.png
 
 # Superpowers visual brainstorming sessions
 .superpowers/
+
+# Local isolated implementation worktrees
+.worktrees/
