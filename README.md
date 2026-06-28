@@ -1,59 +1,111 @@
-# Process Window 분석 대시보드 (Vue3 + FastAPI)
+# EDS BIN Process Window Workbench
 
-웹 개발 입문자를 위한 학습용 프로젝트. 먼저 **`process_window_dashboard_guide.ipynb`** 를 읽으며 개념을 익히고, 아래 코드를 실행해 보세요.
+Vue 3 + FastAPI prototype for a semiconductor YE data-analysis workbench. The app helps process and yield engineers review whether a FAB process management SPEC is appropriate by walking through analysis-set definition, EDS BIN Group construction, condition-rule splits, window review, outlier exclusion, pending EDS prediction, and export/report handoff.
 
-> Python은 **3.10+** 기준입니다.
+This prototype uses synthetic/mock data only. It does not connect to internal databases, authentication systems, or secure company sources.
 
-## 구조
+## File Structure
+
+```text
+backend/
+  app/
+    main.py
+    api/                  FastAPI route modules
+    core/config.py
+    models/schemas.py     Pydantic request contracts
+    services/             mock data, analysis, prediction, export logic
+    data/mock_store.py    in-memory prototype store
+  tests/
+  requirements.txt
+  README.md
+
+frontend/
+  src/
+    main.ts
+    App.vue
+    router/
+    stores/               Pinia stores
+    api/                  typed API client
+    views/                six workbench screens
+    components/           common panels, Plotly charts, window/prediction widgets
+  package.json
 ```
-backend/   FastAPI(파이썬) — binning/시계열 계산 API
-frontend/  Vue3 + Vite + ECharts — 화면과 차트
-```
 
-## 실행 (터미널 2개)
+Legacy demo files from the earlier dashboard remain in the repo, but the current app entrypoint is `frontend/src/main.ts` and the current backend entrypoint is `backend/app/main.py`.
 
-**① 백엔드**
+## Run
+
+Backend:
+
 ```bash
 cd backend
-python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
-# API 테스트: http://localhost:8000/docs
+uvicorn app.main:app --reload
 ```
 
-**② 프론트엔드**
+Frontend:
+
 ```bash
 cd frontend
 npm install
 npm run dev
-# 접속: http://localhost:5173
 ```
 
-## 팀원에게 공유 (같은 LAN/내부망)
+Open `http://localhost:5173`. Vite proxies `/api` to `http://localhost:8000` by default. If another service already uses port 8000, run the backend on another port and start Vite with:
 
-`vite.config.js` 의 `server.host: true` 로 dev 서버가 `0.0.0.0` 에 바인딩되어, 같은 네트워크의 팀원이 접속할 수 있습니다. **IP는 코드 어디에도 고정하지 않습니다** — 실행하는 PC의 현재 IP를 Vite가 자동 감지해 출력하므로, 어느 PC에서 띄우든 그대로 동작합니다. 백엔드는 Vite 프록시를 통해 호스트 내부에서만 호출되어 그대로 두면 됩니다(직접 노출 불필요).
-
-**방법 A — IP로 공유 (간단)**
 ```bash
-npm run dev    # 실행하면 터미널에 "Network: http://<자동감지-IP>:5173/" 가 출력됨
-# 그 Network 주소를 팀원에게 전달. (수동 확인은 macOS: ipconfig getifaddr en0  / 유선은 en1)
+BACKEND_URL=http://127.0.0.1:8001 npm run dev
 ```
-LAN IP는 DHCP로 **바뀔 수 있으니** 외워서 고정하지 말고, 띄울 때마다 출력되는 `Network:` 줄로 그때그때 확인하세요.
 
-**방법 B — 호스트네임으로 공유 (IP가 바뀌어도 고정, 권장)**
+## Mock Data
+
+The backend generates roughly 220 lots, 2,000+ wafers, and 600 EDS BIN columns. The synthetic physics encode:
+
+- high-side `metro_ch_hole_cd` increasing Hole-to-Hole BIN Group risk
+- low-side `metro_ch_hole_cd` increasing Ch.Hole Not Open risk
+- a safe window where both trade-off groups are lower
+- chamber high-side tail behavior
+- PPID/ECO average shifts
+- Tool/Chamber part-modification improvement after a manual date
+- edge/center wafer-zone sensitivity
+- outlier wafers from other-process noise
+- pending EDS wafers with FAB/FDC data available first
+
+## Screens
+
+- Analysis Set: population filters, exclusion toggles, lot/wafer/coverage summary
+- BIN Group: single or summed EDS BIN Failure Mode definitions, including zone groups
+- Condition Rule: ECO/PPID/Tool/Chamber/Recipe/PM-age splits and manual modification rules
+- Window Review: summary, raw scatter, binned response, trade-off, time trend, condition split, zone view, interaction heatmap, and exclusion versions
+- Pending Prediction: explainable regression, prediction interval, confidence, pending risk table, and backtest metrics
+- Export / Report: CSV/JSON downloads and review-candidate summary text
+
+## API
+
+- `GET /api/health`
+- `POST /api/mock-data/reset`
+- `GET /api/metadata`
+- `POST /api/analysis-sets`
+- `GET /api/analysis-sets`
+- `GET /api/analysis-sets/{analysis_set_id}`
+- `POST /api/bin-groups`
+- `GET /api/bin-groups`
+- `POST /api/condition-rules`
+- `GET /api/condition-rules`
+- `POST /api/window-review`
+- `POST /api/exclusion-rules`
+- `GET /api/exclusion-rules`
+- `POST /api/pending-prediction`
+- `GET /api/export/analysis-set/{analysis_set_id}`
+- `GET /api/export/report/{analysis_run_id}`
+
+## Verification
+
 ```bash
-scutil --get LocalHostName     # macOS 컴퓨터 이름 확인 → 주소는 http://<그이름>.local:5173
+python3 -m pytest backend/tests/test_workbench_app.py -q
+cd frontend && npm test && npm run build
 ```
-`*.local`(mDNS) 이름은 IP가 바뀌어도 그대로라 더 안정적입니다. (`vite.config.js` 의 `allowedHosts: ['.local']` 로 허용해 둠)
 
-> 주의
-> - **같은 네트워크(사내 LAN/Wi-Fi)** 에 있어야 접속됩니다. 외부 인터넷에서는 안 됩니다(VPN/사내망 필요).
-> - 첫 접속 시 macOS **방화벽** 이 차단하면 허용해 주세요: 시스템 설정 → 네트워크 → 방화벽.
-> - 내 PC가 켜져 있고 dev 서버가 떠 있어야 접속됩니다. 상시·고정 주소가 필요하면 별도 서버 배포 또는 IT에 고정 IP(DHCP 예약) 요청을 권장합니다.
+## Future Extension
 
-## 사용
-1. X feature / Y target 선택 → **차트 그리기**
-2. spec lower / upper 입력 → binned 차트에 빨간 수직선 표시
-3. 시계열 차트를 드래그/스크롤하면 위·아래가 시간축으로 함께 움직임
-
-자세한 설명은 노트북 9장(파일 아키텍처)과 10장(실행 방법)을 참고하세요.
+The route layer is intentionally thin. To connect real systems later, replace the mock generator/store with database-backed repositories while keeping the service inputs stable. Add authentication, persisted Analysis Run versions, and governed export destinations around the route layer rather than inside chart or prediction logic.
