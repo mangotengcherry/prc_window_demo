@@ -1,6 +1,8 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
+const backendTarget = process.env.BACKEND_URL || 'http://localhost:8000'
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [vue()],
@@ -16,14 +18,16 @@ export default defineConfig({
     proxy: {
       // /api 로 시작하는 요청을 백엔드(8000)로 전달 → 브라우저 CORS 회피.
       // 프록시는 호스트 머신에서 실행되므로 백엔드는 localhost(8000)에 그대로 두면 됨(직접 노출 불필요).
-      '/api': 'http://localhost:8000',
+      '/api': backendTarget,
     },
   },
   build: {
     rollupOptions: {
       output: {
-        // ECharts(최대 의존성)를 별도 청크로 → 앱 코드 변경 시 캐시 유지, 초기 파싱 부담 분리
-        manualChunks: { echarts: ['echarts', 'vue-echarts'] },
+        manualChunks: {
+          plotly: ['plotly.js-dist-min'],
+          element: ['element-plus', '@element-plus/icons-vue'],
+        },
       },
     },
   },
