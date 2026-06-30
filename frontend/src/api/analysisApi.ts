@@ -22,6 +22,26 @@ export async function fetchAnalysisSets() {
   return data
 }
 
+export async function fetchAnalysisConditions() {
+  const { data } = await api.get('/analysis-conditions')
+  return data
+}
+
+export async function copyAnalysisConditionToPersonal(conditionId: string, payload: ApiRecord) {
+  const { data } = await api.post(`/analysis-conditions/${conditionId}/copy-personal`, payload)
+  return data
+}
+
+export async function updateAnalysisCondition(conditionId: string, payload: ApiRecord) {
+  const { data } = await api.patch(`/analysis-conditions/${conditionId}`, payload)
+  return data
+}
+
+export async function createAnalysisSetFromCondition(conditionId: string) {
+  const { data } = await api.post(`/analysis-conditions/${conditionId}/analysis-set`)
+  return data
+}
+
 export async function createBinGroup(payload: ApiRecord) {
   const { data } = await api.post('/bin-groups', payload)
   return data

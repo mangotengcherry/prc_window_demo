@@ -13,6 +13,7 @@ class MockStore:
     analysis_sets: dict[str, dict[str, Any]] = field(default_factory=dict)
     bin_groups: dict[str, dict[str, Any]] = field(default_factory=dict)
     condition_rules: dict[str, dict[str, Any]] = field(default_factory=dict)
+    analysis_conditions: dict[str, dict[str, Any]] = field(default_factory=dict)
     exclusion_rules: dict[str, dict[str, Any]] = field(default_factory=dict)
     analysis_runs: dict[str, dict[str, Any]] = field(default_factory=dict)
     counters: dict[str, int] = field(
@@ -20,6 +21,7 @@ class MockStore:
             "analysis_set": 0,
             "bin_group": 0,
             "condition_rule": 0,
+            "analysis_condition": 0,
             "exclusion_rule": 0,
             "analysis_run": 0,
         }

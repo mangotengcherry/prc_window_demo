@@ -1,20 +1,18 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import AnalysisSetView from '../views/AnalysisSetView.vue'
-import BinGroupView from '../views/BinGroupView.vue'
-import ConditionRuleView from '../views/ConditionRuleView.vue'
+import AnalysisSelectionView from '../views/AnalysisSelectionView.vue'
 import WindowReviewView from '../views/WindowReviewView.vue'
-import PendingPredictionView from '../views/PendingPredictionView.vue'
 import ExportReportView from '../views/ExportReportView.vue'
 import GuideScenarioView from '../views/GuideScenarioView.vue'
 
 const routes = [
-  { path: '/', redirect: '/analysis-set' },
+  { path: '/', redirect: '/analysis-selection' },
   { path: '/guide', component: GuideScenarioView, meta: { label: '사용 가이드' } },
-  { path: '/analysis-set', component: AnalysisSetView, meta: { label: '분석 물량' } },
-  { path: '/bin-group', component: BinGroupView, meta: { label: 'BIN Group' } },
-  { path: '/condition-rule', component: ConditionRuleView, meta: { label: '조건 Rule' } },
+  { path: '/analysis-selection', component: AnalysisSelectionView, meta: { label: '분석물량 선정' } },
+  { path: '/analysis-set', redirect: '/analysis-selection' },
+  { path: '/bin-group', redirect: '/analysis-selection' },
+  { path: '/condition-rule', redirect: '/analysis-selection' },
   { path: '/window-review', component: WindowReviewView, meta: { label: 'Window Review' } },
-  { path: '/pending-prediction', component: PendingPredictionView, meta: { label: 'Pending 예측' } },
+  { path: '/pending-prediction', redirect: '/analysis-selection' },
   { path: '/export-report', component: ExportReportView, meta: { label: 'Export / Report' } },
 ]
 

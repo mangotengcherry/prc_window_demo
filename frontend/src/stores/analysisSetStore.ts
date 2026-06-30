@@ -1,5 +1,14 @@
 import { defineStore } from 'pinia'
-import { createAnalysisSet, fetchAnalysisSets, fetchMetadata, resetMockData } from '../api/analysisApi'
+import {
+  copyAnalysisConditionToPersonal,
+  createAnalysisSet,
+  createAnalysisSetFromCondition,
+  fetchAnalysisConditions,
+  fetchAnalysisSets,
+  fetchMetadata,
+  resetMockData,
+  updateAnalysisCondition,
+} from '../api/analysisApi'
 
 const defaultFilters = () => ({
   product: ['DRAM_A'],
@@ -10,7 +19,7 @@ const defaultFilters = () => ({
   chamber: [],
   ppid: [],
   eco: [],
-  eds_status: 'include_pending',
+  eds_status: 'actual_only',
   exclude_rework: true,
   exclude_engineering_lot: true,
   exclude_abnormal_route: true,
@@ -20,6 +29,7 @@ export const useAnalysisSetStore = defineStore('analysisSet', {
   state: () => ({
     metadata: null as any,
     analysisSets: [] as any[],
+    conditionLibrary: { shared: [], personal: [] } as any,
     selectedAnalysisSetId: '',
     loading: false,
   }),
@@ -35,6 +45,26 @@ export const useAnalysisSetStore = defineStore('analysisSet', {
     async loadAnalysisSets() {
       this.analysisSets = await fetchAnalysisSets()
       if (!this.selectedAnalysisSetId && this.analysisSets.length) this.selectedAnalysisSetId = this.analysisSets[0].id
+    },
+    async loadAnalysisConditions() {
+      this.conditionLibrary = await fetchAnalysisConditions()
+      return this.conditionLibrary
+    },
+    async copyConditionToPersonal(conditionId: string, payload: any) {
+      const item = await copyAnalysisConditionToPersonal(conditionId, payload)
+      await this.loadAnalysisConditions()
+      return item
+    },
+    async updateCondition(conditionId: string, payload: any) {
+      const item = await updateAnalysisCondition(conditionId, payload)
+      await this.loadAnalysisConditions()
+      return item
+    },
+    async createFromCondition(conditionId: string) {
+      const item = await createAnalysisSetFromCondition(conditionId)
+      await this.loadAnalysisSets()
+      this.selectedAnalysisSetId = item.id
+      return item
     },
     async createDefault() {
       const item = await createAnalysisSet({
@@ -55,6 +85,7 @@ export const useAnalysisSetStore = defineStore('analysisSet', {
       await resetMockData()
       await this.loadMetadata()
       await this.loadAnalysisSets()
+      await this.loadAnalysisConditions()
     },
   },
 })

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
+from copy import deepcopy
 from typing import Any
 
 import numpy as np
@@ -100,6 +101,98 @@ def _default_condition_rules() -> list[dict[str, Any]]:
             ],
         }
     ]
+
+
+def _default_analysis_conditions() -> list[dict[str, Any]]:
+    base_analysis_filters = {
+        "product": ["DRAM_A"],
+        "layer": ["M1"],
+        "step": ["ETCH_CONTACT"],
+        "parameter": ["metro_ch_hole_cd"],
+        "tool": [],
+        "chamber": [],
+        "ppid": [],
+        "eco": [],
+        "eds_status": "actual_only",
+        "exclude_rework": True,
+        "exclude_engineering_lot": True,
+        "exclude_abnormal_route": True,
+    }
+    shared_defaults = [
+        ("AC001", "Ch.Hole", "initial", "Ch.Hole initial window 기준", "2026-01-03", "2026-02-15", ["BG001", "BG002"]),
+        ("AC002", "Ch.Hole", "rev1", "Ch.Hole rev1 modification 기준", "2026-02-16", "2026-04-10", ["BG001", "BG002"]),
+        ("AC003", "Ch.Hole", "rev2", "Ch.Hole rev2 안정화 기준", "2026-04-11", "2026-05-31", ["BG001", "BG002"]),
+    ]
+    conditions: list[dict[str, Any]] = []
+    for condition_id, process_key, revision, name, start_date, end_date, bin_group_ids in shared_defaults:
+        filters = deepcopy(base_analysis_filters)
+        filters["start_date"] = start_date
+        filters["end_date"] = end_date
+        conditions.append(
+            {
+                "id": condition_id,
+                "scope": "shared",
+                "readonly": True,
+                "owner": None,
+                "source_condition_id": None,
+                "process_key": process_key,
+                "revision": revision,
+                "name": name,
+                "fab_filters": {
+                    "date_mode": "fixed",
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "recent_days": None,
+                    "product": filters["product"],
+                    "layer": filters["layer"],
+                    "step": filters["step"],
+                    "parameter": filters["parameter"],
+                    "tool": [],
+                    "chamber": [],
+                    "ppid": [],
+                    "eco": [],
+                },
+                "eds_filters": {
+                    "eds_status": "actual_only",
+                    "selected_bin_group_ids": bin_group_ids,
+                    "description": "EDS Data가 확보된 wafer만 분석 대상으로 사용",
+                },
+                "analysis_filters": filters,
+                "selected_bin_group_ids": bin_group_ids,
+                "condition_rule_id": "CR001",
+                "legend_config": {
+                    "basis": "Part modification",
+                    "condition_rule_id": "CR001",
+                    "x_parameter": "metro_ch_hole_cd",
+                },
+            }
+        )
+    personal = deepcopy(conditions[1])
+    personal.update(
+        {
+            "id": "AC004",
+            "scope": "personal",
+            "readonly": False,
+            "owner": "demo.user",
+            "source_condition_id": "AC002",
+            "name": "Ch.Hole rev1 최근 45일 개인 점검",
+            "revision": "rev1-recent-45d",
+        }
+    )
+    personal["fab_filters"] = {
+        **personal["fab_filters"],
+        "date_mode": "recent_days",
+        "start_date": None,
+        "end_date": None,
+        "recent_days": 45,
+    }
+    personal["analysis_filters"] = {
+        **personal["analysis_filters"],
+        "start_date": None,
+        "end_date": None,
+    }
+    conditions.append(personal)
+    return conditions
 
 
 def reset_mock_data(seed: int | None = None) -> dict[str, Any]:
@@ -235,6 +328,7 @@ def reset_mock_data(seed: int | None = None) -> dict[str, Any]:
 
     default_groups = _default_bin_groups()
     default_rules = _default_condition_rules()
+    default_conditions = _default_analysis_conditions()
     store.wafer_data = df
     store.metadata = {
         "products": PRODUCTS,
@@ -258,12 +352,14 @@ def reset_mock_data(seed: int | None = None) -> dict[str, Any]:
     store.analysis_sets.clear()
     store.bin_groups = {group["id"]: group for group in default_groups}
     store.condition_rules = {rule["id"]: rule for rule in default_rules}
+    store.analysis_conditions = {condition["id"]: condition for condition in default_conditions}
     store.exclusion_rules.clear()
     store.analysis_runs.clear()
     store.counters = {
         "analysis_set": 0,
         "bin_group": len(default_groups),
         "condition_rule": len(default_rules),
+        "analysis_condition": len(default_conditions),
         "exclusion_rule": 0,
         "analysis_run": 0,
     }

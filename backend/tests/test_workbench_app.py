@@ -149,6 +149,64 @@ def test_analysis_set_bin_group_condition_rule_and_window_review_roundtrip():
     assert review["decision_candidates"]
 
 
+def test_analysis_condition_library_separates_shared_readonly_and_personal_editable_conditions():
+    reset_status, _, _ = json_request("POST", "/api/mock-data/reset")
+    assert reset_status == 200
+
+    list_status, _, library = json_request("GET", "/api/analysis-conditions")
+    assert list_status == 200
+    assert library["shared"]
+    assert library["personal"]
+
+    ch_hole = next(item for item in library["shared"] if item["process_key"] == "Ch.Hole" and item["revision"] == "rev1")
+    assert ch_hole["scope"] == "shared"
+    assert ch_hole["readonly"] is True
+    assert ch_hole["fab_filters"]["date_mode"] == "fixed"
+    assert ch_hole["analysis_filters"]["eds_status"] == "actual_only"
+
+    shared_update_status, _, shared_update = json_request(
+        "PATCH",
+        f"/api/analysis-conditions/{ch_hole['id']}",
+        {"name": "Should not edit shared condition"},
+    )
+    assert shared_update_status == 409
+    assert "read-only" in shared_update["detail"]
+
+    copy_status, _, personal_copy = json_request(
+        "POST",
+        f"/api/analysis-conditions/{ch_hole['id']}/copy-personal",
+        {"owner": "jimin", "name": "Ch.Hole rev1 최근 30일 quick check"},
+    )
+    assert copy_status == 200
+    assert personal_copy["scope"] == "personal"
+    assert personal_copy["readonly"] is False
+    assert personal_copy["source_condition_id"] == ch_hole["id"]
+
+    update_status, _, updated = json_request(
+        "PATCH",
+        f"/api/analysis-conditions/{personal_copy['id']}",
+        {
+            "fab_filters": {
+                "date_mode": "recent_days",
+                "recent_days": 30,
+                "start_date": None,
+                "end_date": None,
+            }
+        },
+    )
+    assert update_status == 200
+    assert updated["fab_filters"]["date_mode"] == "recent_days"
+    assert updated["fab_filters"]["recent_days"] == 30
+
+    create_status, _, analysis_set = json_request(
+        "POST",
+        f"/api/analysis-conditions/{updated['id']}/analysis-set",
+    )
+    assert create_status == 200
+    assert analysis_set["filters"]["eds_status"] == "actual_only"
+    assert analysis_set["metrics"]["eds_pending_count"] == 0
+
+
 def test_exclusion_prediction_and_exports_are_available():
     _, _, analysis_set = json_request(
         "POST",

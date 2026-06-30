@@ -29,6 +29,23 @@ class AnalysisSetCreate(BaseModel):
     filters: AnalysisSetFilters
 
 
+class AnalysisConditionCopy(BaseModel):
+    owner: str = "demo.user"
+    name: str | None = None
+
+
+class AnalysisConditionUpdate(BaseModel):
+    name: str | None = None
+    process_key: str | None = None
+    revision: str | None = None
+    fab_filters: dict[str, Any] | None = None
+    eds_filters: dict[str, Any] | None = None
+    analysis_filters: dict[str, Any] | None = None
+    selected_bin_group_ids: list[str] | None = None
+    condition_rule_id: str | None = None
+    legend_config: dict[str, Any] | None = None
+
+
 class BinGroupCreate(BaseModel):
     name: str
     description: str = ""

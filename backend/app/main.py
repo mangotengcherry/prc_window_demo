@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import (
     routes_analysis_sets,
+    routes_analysis_conditions,
     routes_bin_groups,
     routes_condition_rules,
     routes_exclusions,
@@ -41,6 +42,7 @@ def health():
 
 app.include_router(routes_metadata.router)
 app.include_router(routes_analysis_sets.router)
+app.include_router(routes_analysis_conditions.router)
 app.include_router(routes_bin_groups.router)
 app.include_router(routes_condition_rules.router)
 app.include_router(routes_window_review.router)
