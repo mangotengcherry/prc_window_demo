@@ -9,8 +9,17 @@ export const useWindowReviewStore = defineStore('windowReview', {
     report: null as any,
     loading: false,
     lastRequest: null as any,
+    viewOptions: {
+      bins: 8,
+      y_axis_metric: null as string | null,
+      interaction_x: null as string | null,
+      interaction_y: null as string | null,
+    },
   }),
   actions: {
+    setViewOption(key: 'bins' | 'y_axis_metric' | 'interaction_x' | 'interaction_y', value: any) {
+      ;(this.viewOptions as any)[key] = value
+    },
     async runReview(payload: any) {
       this.loading = true
       try {

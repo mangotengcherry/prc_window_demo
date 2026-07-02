@@ -217,7 +217,7 @@ select {
 
 .summary-band {
   display: grid;
-  grid-template-columns: repeat(4, minmax(140px, 1fr)) minmax(260px, 1.6fr);
+  grid-template-columns: repeat(6, minmax(120px, 1fr)) minmax(240px, 1.4fr);
   gap: 10px;
   min-width: 0;
 }

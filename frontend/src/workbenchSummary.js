@@ -15,6 +15,12 @@ function cautiousCandidate(firstCandidate) {
   return `${firstCandidate.type}: ${basis}`
 }
 
+const trendText = (recentTrend) => {
+  if (!recentTrend || recentTrend.delta == null) return '-'
+  const arrow = recentTrend.delta > 0 ? '▲' : recentTrend.delta < 0 ? '▼' : '-'
+  return `${arrow} ${pct(Math.abs(recentTrend.delta))} (최근 30일 ${pct(recentTrend.recent_30d_fail)})`
+}
+
 export function summarizeWindowReview(review) {
   const metrics = review?.summary_metrics || {}
   const firstCandidate = review?.decision_candidates?.[0]
@@ -28,6 +34,8 @@ export function summarizeWindowReview(review) {
     lowFailRateText: pct(metrics.low_side_fail_rate),
     correlationText: metrics.correlation == null ? '-' : Number(metrics.correlation).toFixed(2),
     safeWindowText: windowText(metrics.safe_window),
+    safeWindowOccupancyText: pct(metrics.safe_window_occupancy),
+    recentTrendText: trendText(metrics.recent_trend),
     primaryCandidate,
     xParameter: review?.context?.x_parameter || '-',
     yMetric: review?.context?.bin_groups?.[0]?.name || '-',
