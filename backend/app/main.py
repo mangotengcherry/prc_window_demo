@@ -8,6 +8,7 @@ from app.api import (
     routes_bin_groups,
     routes_condition_rules,
     routes_exclusions,
+    routes_expressions,
     routes_export,
     routes_metadata,
     routes_prediction,
@@ -40,6 +41,7 @@ def health():
 
 
 app.include_router(routes_metadata.router)
+app.include_router(routes_expressions.router)
 app.include_router(routes_analysis_sets.router)
 app.include_router(routes_bin_groups.router)
 app.include_router(routes_condition_rules.router)

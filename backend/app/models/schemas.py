@@ -69,6 +69,12 @@ class ExclusionRuleCreate(BaseModel):
     reason: str
 
 
+class ExpressionValidateRequest(BaseModel):
+    expression: str
+    mode: Literal["filter", "column"] = "filter"
+    context: Literal["fab", "eds"] = "fab"
+
+
 class PendingPredictionRequest(BaseModel):
     analysis_set_id: str
     x_parameters: list[str]
