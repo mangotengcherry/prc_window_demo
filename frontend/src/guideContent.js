@@ -2,7 +2,7 @@ export const guideWorkflowSteps = [
   {
     title: '1. 분석 물량 정의',
     menu: 'Analysis Set',
-    body: '기간, Product, Layer, Step, FAB parameter, EDS 완료 여부와 제외 조건을 정해 검토할 Lot/Wafer 모집단을 고정합니다.',
+    body: 'Preset 조건 라이브러리를 불러오거나 FAB 진행 이력(최대 3공정 join)과 EDS 아이템 조건을 새로 구성하고, 시계열 scatter 미리보기로 확인한 뒤 검토할 Lot/Wafer 모집단을 고정합니다.',
   },
   {
     title: '2. BIN Group 정의',
@@ -17,7 +17,7 @@ export const guideWorkflowSteps = [
   {
     title: '4. Window 관계 확인',
     menu: 'Window Review',
-    body: 'Raw Scatter, Binned Response, Trade-off, Time Trend, Zone View, Interaction을 보며 SPEC 변경 후보인지 판단합니다.',
+    body: 'BIN Pareto, Driver Ranking으로 원인 후보를 좁히고 Raw Scatter, Binned Response, Trade-off, Time Trend, Commonality, Zone View, Interaction을 보며 SPEC 변경 후보인지 판단합니다.',
   },
   {
     title: '5. Noise 후보는 Rule로 제외',
