@@ -52,7 +52,7 @@ const isValid = ref<boolean | null>(null)
 const errorMessage = ref('')
 let timer: ReturnType<typeof setTimeout> | null = null
 
-const defaultPlaceholder = 'case when [PPID] != "TT_TEST" then ... — Spotfire/SQL 문법 모두 지원'
+const defaultPlaceholder = 'case when [PPID] != "TT_TEST" then ... — Spotfire 문법 지원'
 
 const extraColumns = computed(() => (props.context === 'eds' ? ['value', 'part_id', 'eds_step', 'test_time'] : []))
 const columns = computed(() => [

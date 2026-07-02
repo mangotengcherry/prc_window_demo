@@ -24,11 +24,17 @@ def _sample_df():
     )
 
 
-def test_bracket_and_sql_style_are_equivalent():
+def test_bare_identifier_raises_bracket_error():
     df = _sample_df()
-    bracket = evaluate_filter('[PPID] != "TT_TEST"', df)
-    sql = evaluate_filter("PPID <> 'TT_TEST'", df)
-    assert list(bracket) == list(sql) == [True, True, False, True]
+    with pytest.raises(ExpressionError) as exc_info:
+        evaluate_filter("PPID != 'TT_TEST'", df)
+    assert "대괄호" in exc_info.value.message
+
+
+def test_sql_style_not_equal_operator_raises_error():
+    df = _sample_df()
+    with pytest.raises(ExpressionError):
+        evaluate_filter("[PPID] <> 'TT_TEST'", df)
 
 
 def test_and_or_precedence_parentheses_not_in_is_null():
@@ -39,25 +45,25 @@ def test_and_or_precedence_parentheses_not_in_is_null():
         }
     )
     # AND binds tighter than OR
-    result = evaluate_filter("zone = 'edge' AND ppid = 'PPID_A' OR ppid = 'PPID_C'", df)
+    result = evaluate_filter("[zone] = 'edge' AND [ppid] = 'PPID_A' OR [ppid] = 'PPID_C'", df)
     assert list(result) == [True, False, True, False]
 
-    result_paren = evaluate_filter("zone = 'edge' AND (ppid = 'PPID_A' OR ppid = 'PPID_C')", df)
+    result_paren = evaluate_filter("[zone] = 'edge' AND ([ppid] = 'PPID_A' OR [ppid] = 'PPID_C')", df)
     assert list(result_paren) == [True, False, True, False]
 
-    result_not = evaluate_filter("NOT (zone = 'edge')", df)
+    result_not = evaluate_filter("NOT ([zone] = 'edge')", df)
     assert list(result_not) == [False, True, False, True]
 
-    result_in = evaluate_filter("ppid IN ('PPID_A', 'PPID_C')", df)
+    result_in = evaluate_filter("[ppid] IN ('PPID_A', 'PPID_C')", df)
     assert list(result_in) == [True, False, True, True]
 
-    result_not_in = evaluate_filter("ppid NOT IN ('PPID_A', 'PPID_C')", df)
+    result_not_in = evaluate_filter("[ppid] NOT IN ('PPID_A', 'PPID_C')", df)
     assert list(result_not_in) == [False, True, False, False]
 
-    result_null = evaluate_filter("zone IS NULL", df)
+    result_null = evaluate_filter("[zone] IS NULL", df)
     assert list(result_null) == [False, False, False, True]
 
-    result_not_null = evaluate_filter("zone IS NOT NULL", df)
+    result_not_null = evaluate_filter("[zone] IS NOT NULL", df)
     assert list(result_not_null) == [True, True, True, False]
 
 
@@ -88,7 +94,7 @@ def test_unknown_column_reports_close_match_suggestion():
 def test_unclosed_parenthesis_raises_error():
     df = _sample_df()
     with pytest.raises(ExpressionError):
-        evaluate_filter("(ppid = 'PPID_A'", df)
+        evaluate_filter("([ppid] = 'PPID_A'", df)
 
 
 def test_non_bool_result_in_filter_mode_raises_error():
@@ -109,7 +115,7 @@ def test_type_mismatch_between_string_and_numeric_raises_error():
 
 
 def test_columns_used_extracts_raw_names():
-    assert columns_used("[PPID] != \"TT_TEST\" AND zone = 'edge'") == ["PPID", "zone"]
+    assert columns_used("[PPID] != \"TT_TEST\" AND [zone] = 'edge'") == ["PPID", "zone"]
 
 
 # ---------------------------------------------------------------------------

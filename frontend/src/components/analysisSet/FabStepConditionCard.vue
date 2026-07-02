@@ -29,7 +29,7 @@
         />
       </el-form-item>
     </div>
-    <el-form-item label="FAB 필터식 (Spotfire/SQL)">
+    <el-form-item label="FAB 필터식 (Spotfire)">
       <ExpressionEditor v-model="condition.filter_expression" context="fab" @valid-change="onExprValid" />
     </el-form-item>
     <el-alert v-if="error" :title="error.message" type="error" show-icon :closable="false" class="mt-8" />

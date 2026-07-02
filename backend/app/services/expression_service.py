@@ -1,4 +1,4 @@
-"""Spotfire/SQL 통합 서브셋 필터식 파서·평가기 (§5).
+"""Spotfire 서브셋 필터식 파서·평가기 (§5).
 
 `eval`/`exec`/`DataFrame.query`는 사용하지 않는다. 자체 정규식 토크나이저 →
 재귀 하강 파서 → AST → pandas 벡터 연산(`evaluate`)으로 처리한다.
@@ -95,7 +95,7 @@ _TOKEN_SPEC = [
     ("BRACKET_COLUMN", r"\[[^\]]+\]"),
     ("STRING", r"'[^']*'|\"[^\"]*\""),
     ("NUMBER", r"\d+\.\d+|\d+"),
-    ("OP", r"!=|<>|==|>=|<=|=|>|<|\+|-|\*|/|\(|\)|,"),
+    ("OP", r"!=|==|>=|<=|=|>|<|\+|-|\*|/|\(|\)|,"),
     ("IDENT", r"[A-Za-z_][A-Za-z0-9_]*"),
 ]
 _TOKEN_RE = re.compile("|".join(f"(?P<{name}>{pattern})" for name, pattern in _TOKEN_SPEC))
@@ -129,7 +129,7 @@ def _tokenize(expression: str) -> list[Token]:
 # 재귀 하강 파서
 # ---------------------------------------------------------------------------
 
-_CMP_OPS = {"=", "==", "!=", "<>", ">", ">=", "<", "<="}
+_CMP_OPS = {"=", "==", "!=", ">", ">=", "<", "<="}
 
 
 class _Parser:
@@ -279,8 +279,7 @@ class _Parser:
             self.advance()
             return Column(tok.value[1:-1], tok.pos)
         if tok.type == "IDENT" and tok.value.upper() not in _KEYWORDS:
-            self.advance()
-            return Column(tok.value, tok.pos)
+            raise ExpressionError(f"컬럼은 대괄호로 감싸야 합니다: '{tok.value}' → [{tok.value}]", tok.pos)
         raise ExpressionError(f"예상치 못한 토큰: '{tok.value}'", tok.pos)
 
     def _parse_literal(self) -> Literal:
@@ -321,7 +320,6 @@ _COMPARISON_OPS = {
     "=": operator.eq,
     "==": operator.eq,
     "!=": operator.ne,
-    "<>": operator.ne,
     ">": operator.gt,
     ">=": operator.ge,
     "<": operator.lt,

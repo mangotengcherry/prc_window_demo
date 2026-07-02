@@ -52,7 +52,7 @@
       </el-form-item>
     </div>
 
-    <el-form-item label="EDS 필터식 (SQL/Spotfire)">
+    <el-form-item label="EDS 필터식 (Spotfire)">
       <ExpressionEditor v-model="criteria.filter_expression" context="eds" />
       <el-alert v-if="error?.stage === 'eds_filter'" :title="error.message" type="error" show-icon :closable="false" class="mt-8" />
     </el-form-item>
