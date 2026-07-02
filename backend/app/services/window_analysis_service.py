@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import numpy as np
@@ -12,6 +13,16 @@ from app.services.bin_group_service import attach_group_metric, get_bin_group
 from app.services.condition_rule_service import get_condition_rule, legend_for
 from app.services.exclusion_service import get_exclusion_rule
 from app.services.mock_data_service import H2H_BINS, NOT_OPEN_BINS, ensure_mock_data
+
+logger = logging.getLogger(__name__)
+
+try:
+    from scipy import stats as scipy_stats
+except ImportError:  # pragma: no cover - scipy is a declared dependency
+    scipy_stats = None
+    logger.warning("scipy를 불러오지 못해 commonality_data 계산을 건너뜁니다.")
+
+COMMONALITY_FACTORS = ["tool_id", "chamber_id", "ppid", "eco_number", "recipe_version", "part_modification_flag"]
 
 
 def _round(value: Any, digits: int = 5) -> float | None:
@@ -51,6 +62,162 @@ def _safe_window(df: pd.DataFrame, x: str, y: str) -> dict[str, Any]:
     threshold = s[y].quantile(0.45)
     safe = s[s[y] <= threshold]
     return {"lower": _round(safe[x].quantile(0.15), 4), "upper": _round(safe[x].quantile(0.85), 4)}
+
+
+def _safe_window_occupancy(df: pd.DataFrame, x: str, safe_window: dict[str, Any]) -> float | None:
+    lower = safe_window.get("lower")
+    upper = safe_window.get("upper")
+    if lower is None or upper is None:
+        return None
+    s = df[x].dropna()
+    if s.empty:
+        return None
+    return _round(((s >= lower) & (s <= upper)).mean(), 4)
+
+
+def _recent_trend(actual: pd.DataFrame, y: str) -> dict[str, Any] | None:
+    s = actual[["process_date", y]].dropna()
+    if s.empty:
+        return None
+    last_date = s["process_date"].max()
+    recent_start = last_date - pd.Timedelta(days=29)
+    prior_start = recent_start - pd.Timedelta(days=30)
+    prior_end = recent_start - pd.Timedelta(days=1)
+    recent = s[(s["process_date"] >= recent_start) & (s["process_date"] <= last_date)]
+    prior = s[(s["process_date"] >= prior_start) & (s["process_date"] <= prior_end)]
+    recent_fail = recent[y].mean() if len(recent) else None
+    prior_fail = prior[y].mean() if len(prior) else None
+    delta = (recent_fail - prior_fail) if recent_fail is not None and prior_fail is not None and not pd.isna(recent_fail) and not pd.isna(prior_fail) else None
+    return {
+        "recent_30d_fail": _round(recent_fail),
+        "prior_30d_fail": _round(prior_fail),
+        "delta": _round(delta),
+    }
+
+
+def _spc(actual_rows: list[dict[str, Any]]) -> dict[str, Any] | None:
+    values = [(row["date"], row["actual_fail_rate"]) for row in actual_rows if row["actual_fail_rate"] is not None]
+    if len(values) < 20:
+        return None
+    dates = [v[0] for v in values]
+    series = np.array([v[1] for v in values], dtype=float)
+    center = float(series.mean())
+    sigma = float(series.std(ddof=1))
+    ucl = center + 3 * sigma
+    lcl = center - 3 * sigma
+    violations: list[dict[str, str]] = []
+    for date, value in zip(dates, series, strict=False):
+        if value > ucl or value < lcl:
+            violations.append({"date": date, "type": "beyond_3sigma"})
+    run_side = 0  # +1 above center, -1 below center, 0 undefined
+    run_length = 0
+    for date, value in zip(dates, series, strict=False):
+        side = 1 if value > center else (-1 if value < center else 0)
+        if side != 0 and side == run_side:
+            run_length += 1
+        else:
+            run_side = side
+            run_length = 1 if side != 0 else 0
+        if side != 0 and run_length == 7:
+            violations.append({"date": date, "type": "run_of_7"})
+    return {
+        "center": _round(center),
+        "ucl": _round(ucl),
+        "lcl": _round(lcl),
+        "sigma": _round(sigma),
+        "violations": violations,
+    }
+
+
+def _pareto(actual: pd.DataFrame, bin_cols: list[str], selected_bin_ids: set[str]) -> list[dict[str, Any]]:
+    if not bin_cols or actual.empty:
+        return []
+    means = actual[bin_cols].mean()
+    total = means.sum()
+    if total <= 0:
+        return []
+    top = means.sort_values(ascending=False).head(30)
+    rows = []
+    cum = 0.0
+    for bin_id, mean_fail_rate in top.items():
+        contribution = float(mean_fail_rate) / float(total)
+        cum += contribution
+        rows.append(
+            {
+                "bin_id": bin_id,
+                "mean_fail_rate": _round(mean_fail_rate),
+                "loss_contribution": _round(contribution, 4),
+                "cum_pct": _round(cum, 4),
+                "in_selected_group": bin_id in selected_bin_ids,
+            }
+        )
+    return rows
+
+
+def _driver_ranking(actual: pd.DataFrame, y: str, numeric_columns: list[str]) -> list[dict[str, Any]]:
+    rows = []
+    for column in numeric_columns:
+        if column not in actual.columns or column == y:
+            continue
+        s = actual[[column, y]].dropna()
+        n = len(s)
+        if n < 30 or s[column].std(ddof=0) == 0 or s[y].std(ddof=0) == 0:
+            continue
+        corr = float(np.corrcoef(s[column], s[y])[0, 1])
+        rows.append({"parameter": column, "corr": _round(corr, 4), "abs_corr": _round(abs(corr), 4), "n": n})
+    rows.sort(key=lambda row: row["abs_corr"], reverse=True)
+    return rows
+
+
+def _commonality(actual: pd.DataFrame, y: str, factors: list[str]) -> list[dict[str, Any]]:
+    if scipy_stats is None:
+        return []
+    rows = []
+    for factor in factors:
+        if factor not in actual.columns:
+            continue
+        s = actual[[factor, y]].dropna()
+        group_frames = [part[y].to_numpy() for _, part in s.groupby(factor, observed=True) if len(part) >= 5]
+        if len(group_frames) < 2:
+            continue
+        h_stat, p_value = scipy_stats.kruskal(*group_frames)
+        k = len(group_frames)
+        n = sum(len(g) for g in group_frames)
+        epsilon_sq = (h_stat - k + 1) / (n - k) if n > k else None
+        groups = []
+        worst_value = None
+        worst_median = None
+        for value, part in s.groupby(factor, observed=True):
+            if len(part) < 5:
+                continue
+            median = float(part[y].median())
+            groups.append(
+                {
+                    "value": value,
+                    "n": int(len(part)),
+                    "median": _round(median),
+                    "q1": _round(part[y].quantile(0.25)),
+                    "q3": _round(part[y].quantile(0.75)),
+                    "mean": _round(part[y].mean()),
+                    "min": _round(part[y].min()),
+                    "max": _round(part[y].max()),
+                }
+            )
+            if worst_median is None or median > worst_median:
+                worst_median = median
+                worst_value = value
+        rows.append(
+            {
+                "factor": factor,
+                "p_value": _round(p_value, 6),
+                "effect_size": _round(epsilon_sq, 4) if epsilon_sq is not None else None,
+                "group_count": k,
+                "worst_group": worst_value,
+                "groups": groups,
+            }
+        )
+    rows.sort(key=lambda row: row["p_value"] if row["p_value"] is not None else 1.0)
+    return rows
 
 
 def _binned(df: pd.DataFrame, x: str, y: str, bins: int, group_name: str) -> list[dict[str, Any]]:
@@ -119,8 +286,9 @@ def _zone(df: pd.DataFrame, x: str, y: str, bins: int) -> list[dict[str, Any]]:
     return rows
 
 
-def _interaction(df: pd.DataFrame, x: str, y: str) -> list[dict[str, Any]]:
-    second = "metro_thickness" if x != "metro_thickness" else "fdc_temp_mean"
+def _interaction(df: pd.DataFrame, x: str, y: str, second: str | None = None) -> list[dict[str, Any]]:
+    if not second:
+        second = "metro_thickness" if x != "metro_thickness" else "fdc_temp_mean"
     work = df[[x, second, y]].dropna().copy()
     if work.empty:
         return []
@@ -183,9 +351,18 @@ def compute_window_review(payload: WindowReviewRequest) -> dict[str, Any]:
     group_ids = payload.bin_group_ids or ["BG001"]
     groups = [get_bin_group(group_id) for group_id in group_ids]
     primary_group = groups[0]
-    metric_col = "_selected_metric"
-    frame[metric_col] = attach_group_metric(frame, primary_group)
-    original_frame[metric_col] = attach_group_metric(original_frame, primary_group)
+    metric_columns: dict[str, str] = {}
+    for group in groups:
+        col_name = f"_metric_{group['id']}"
+        frame[col_name] = attach_group_metric(frame, group)
+        original_frame[col_name] = attach_group_metric(original_frame, group)
+        metric_columns[group["id"]] = col_name
+    metric_col = metric_columns[primary_group["id"]]
+    y_axis_option = payload.view_options.get("y_axis_metric")
+    if y_axis_option == "yield":
+        metric_col = "yield"
+    elif y_axis_option in metric_columns:
+        metric_col = metric_columns[y_axis_option]
     frame["_h2h"] = frame[[bin_id for bin_id in H2H_BINS if bin_id in frame.columns]].sum(axis=1)
     frame["_not_open"] = frame[[bin_id for bin_id in NOT_OPEN_BINS if bin_id in frame.columns]].sum(axis=1)
 
@@ -208,6 +385,24 @@ def compute_window_review(payload: WindowReviewRequest) -> dict[str, Any]:
     before_stats = _linear_stats(original_frame[original_frame["eds_status"] == "actual"], x, metric_col)
     after_stats = stats
 
+    safe_window_occupancy = _safe_window_occupancy(frame, x, safe_window)
+    recent_trend = _recent_trend(actual, metric_col)
+    trend_data = _trend(frame, x, metric_col)
+    trend_data["spc"] = _spc(trend_data["actual"])
+
+    bin_cols = [c for c in actual.columns if c.startswith("BIN_")]
+    selected_bin_ids = {bin_id for group in groups for bin_id in group["bin_ids"]}
+    pareto_data = _pareto(actual, bin_cols, selected_bin_ids)
+    driver_ranking = _driver_ranking(actual, metric_col, store.metadata.get("numeric_columns", []))
+    commonality_data = _commonality(actual, metric_col, COMMONALITY_FACTORS)
+
+    interaction_x = payload.view_options.get("interaction_x") or x
+    if interaction_x not in actual.columns:
+        interaction_x = x
+    interaction_y = payload.view_options.get("interaction_y")
+    if interaction_y and interaction_y not in actual.columns:
+        interaction_y = None
+
     run_id = store.next_id("analysis_run", "RUN")
     response = {
         "analysis_run_id": run_id,
@@ -228,6 +423,8 @@ def compute_window_review(payload: WindowReviewRequest) -> dict[str, Any]:
             "high_side_fail_rate": _round(high_rate),
             "low_side_fail_rate": _round(low_rate),
             "safe_window": safe_window,
+            "safe_window_occupancy": safe_window_occupancy,
+            "recent_trend": recent_trend,
         },
         "decision_candidates": _candidate_copy(stats, low_rate, high_rate),
         "evidence": [
@@ -237,10 +434,13 @@ def compute_window_review(payload: WindowReviewRequest) -> dict[str, Any]:
         ],
         "scatter_data": scatter,
         "binned_response_data": _binned(actual, x, metric_col, bins, primary_group["name"]),
-        "trend_data": _trend(frame, x, metric_col),
+        "trend_data": trend_data,
         "tradeoff_data": _tradeoff(actual, x, bins),
         "zone_data": _zone(actual, x, metric_col, max(4, bins // 2)),
-        "interaction_heatmap_data": _interaction(actual, x, metric_col),
+        "interaction_heatmap_data": _interaction(actual, interaction_x, metric_col, interaction_y),
+        "pareto_data": pareto_data,
+        "driver_ranking": driver_ranking,
+        "commonality_data": commonality_data,
         "excluded_point_summary": {
             "exclusion_rule_id": payload.exclusion_rule_id,
             "excluded_count": int(len(original_frame) - len(frame)),

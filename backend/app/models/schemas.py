@@ -54,6 +54,8 @@ class WindowReviewRequest(BaseModel):
     bin_group_ids: list[str] = Field(default_factory=list)
     condition_rule_id: str | None = None
     exclusion_rule_id: str | None = None
+    # 허용 키: bins(binned/tradeoff/zone 구간 수), interaction_x/interaction_y(Interaction 탭 인자 선택),
+    # y_axis_metric(Raw Scatter y축 — bin_group_ids 중 하나의 id 또는 "yield")
     view_options: dict[str, Any] = Field(default_factory=dict)
 
 
