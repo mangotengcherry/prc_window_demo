@@ -26,7 +26,7 @@ frontend/
     router/
     stores/               Pinia stores
     api/                  typed API client
-    views/                six workbench screens
+    views/                four workbench screens
     components/           common panels, Plotly charts, window/prediction widgets
   package.json
 ```
@@ -74,9 +74,7 @@ The backend generates roughly 220 lots, 2,000+ wafers, and 600 EDS BIN columns. 
 ## Screens
 
 - Analysis Set: preset condition library (folder/revision tree, personal/shared), a two-step FAB progress history (up to 3 join blocks) + EDS item selection form with Spotfire/SQL-style filter expressions, and a scatter preview of the resulting population before saving it as an Analysis Set
-- BIN Group: single or summed EDS BIN Failure Mode definitions, including zone groups
-- Condition Rule: ECO/PPID/Tool/Chamber/Recipe/PM-age splits and manual modification rules
-- Window Review: summary, BIN Pareto, Driver Ranking, raw scatter, binned response, trade-off, time trend (with SPC control limits), Commonality (Kruskal-Wallis factor ranking), zone view, interaction heatmap, and exclusion versions
+- Window Review: summary, BIN Pareto, Driver Ranking, raw scatter, binned response, trade-off, time trend (with SPC control limits), Commonality (Kruskal-Wallis factor ranking), zone view, interaction heatmap, and exclusion versions; BIN Group and Condition Rule selections are made here via dropdowns
 - Pending Prediction: explainable regression, prediction interval, confidence, pending risk table, and backtest metrics
 - Export / Report: CSV/JSON downloads and review-candidate summary text
 

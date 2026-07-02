@@ -7,9 +7,7 @@
       </div>
       <el-menu router :default-active="$route.path" class="nav-menu">
         <el-menu-item index="/guide"><el-icon><Guide /></el-icon><span>사용 가이드</span></el-menu-item>
-        <el-menu-item index="/analysis-set"><el-icon><Filter /></el-icon><span>분석 물량</span></el-menu-item>
-        <el-menu-item index="/bin-group"><el-icon><Grid /></el-icon><span>BIN Group</span></el-menu-item>
-        <el-menu-item index="/condition-rule"><el-icon><SetUp /></el-icon><span>조건 Rule</span></el-menu-item>
+        <el-menu-item index="/analysis-set"><el-icon><Filter /></el-icon><span>분석대상 선정</span></el-menu-item>
         <el-menu-item index="/window-review"><el-icon><TrendCharts /></el-icon><span>Window Review</span></el-menu-item>
         <el-menu-item index="/pending-prediction"><el-icon><DataLine /></el-icon><span>Pending 예측</span></el-menu-item>
         <el-menu-item index="/export-report"><el-icon><Download /></el-icon><span>Export / Report</span></el-menu-item>
@@ -41,7 +39,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { DataLine, Download, Filter, Grid, Guide, Plus, Refresh, SetUp, TrendCharts } from '@element-plus/icons-vue'
+import { DataLine, Download, Filter, Guide, Plus, Refresh, TrendCharts } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useAnalysisSetStore } from './stores/analysisSetStore'
 import { useBinGroupStore } from './stores/binGroupStore'

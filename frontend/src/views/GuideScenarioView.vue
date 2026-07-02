@@ -4,7 +4,7 @@
       <div class="guide-hero">
         <div>
           <span class="guide-kicker">처음 시작할 때</span>
-          <h2>먼저 “분석 물량 → BIN Group → 조건 Rule → Window Review” 순서로 보세요.</h2>
+          <h2>먼저 “분석대상 선정 → Window Review” 순서로 보세요.</h2>
           <p>
             이 Workbench는 Spotfire를 대체하기보다, SPEC 적정성 검토에 반복되는 물량 정의,
             FAB-EDS 조인 관점, trade-off BIN Group, noise 제외, Pending 예측, 보고용 export를 한 흐름으로 묶는 용도입니다.
