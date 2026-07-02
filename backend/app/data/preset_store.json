@@ -1,0 +1,188 @@
+{
+  "folders": [
+    {
+      "id": "PF001",
+      "name": "Ch.Hole",
+      "order": 1
+    },
+    {
+      "id": "PF002",
+      "name": "WLCUT",
+      "order": 2
+    }
+  ],
+  "presets": [
+    {
+      "id": "PS001",
+      "folder_id": "PF001",
+      "name": "Mask",
+      "scope": "personal",
+      "owner": "me",
+      "created_at": "2026-07-02T00:00:00",
+      "revisions": [
+        {
+          "rev": 0,
+          "note": "초기 조건",
+          "created_at": "2026-07-02T00:00:00",
+          "created_by": "me",
+          "criteria": {
+            "fab": {
+              "products": [
+                "KCAI"
+              ],
+              "step_conditions": [
+                {
+                  "fab_step": "CR380020",
+                  "date_range": {
+                    "start": "2026-01-01",
+                    "end": "2026-06-19"
+                  },
+                  "filter_expression": ""
+                }
+              ],
+              "primary_step": "CR380020",
+              "exclude_rework": true,
+              "exclude_engineering_lot": true,
+              "exclude_abnormal_route": true
+            },
+            "eds": null,
+            "chart": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "PS002",
+      "folder_id": "PF001",
+      "name": "ETCH",
+      "scope": "shared",
+      "owner": "me",
+      "created_at": "2026-07-02T00:00:00",
+      "revisions": [
+        {
+          "rev": 0,
+          "note": "초기 조건",
+          "created_at": "2026-07-02T00:00:00",
+          "created_by": "me",
+          "criteria": {
+            "fab": {
+              "products": [
+                "KCAI"
+              ],
+              "step_conditions": [
+                {
+                  "fab_step": "CR860200",
+                  "date_range": {
+                    "start": "2026-01-01",
+                    "end": "2026-06-19"
+                  },
+                  "filter_expression": ""
+                }
+              ],
+              "primary_step": "CR860200",
+              "exclude_rework": true,
+              "exclude_engineering_lot": true,
+              "exclude_abnormal_route": true
+            },
+            "eds": null,
+            "chart": null
+          }
+        },
+        {
+          "rev": 1,
+          "note": "ETCH recipe 변경 반영",
+          "created_at": "2026-07-02T00:00:00",
+          "created_by": "me",
+          "criteria": {
+            "fab": {
+              "products": [
+                "KCAI"
+              ],
+              "step_conditions": [
+                {
+                  "fab_step": "CR860200",
+                  "date_range": {
+                    "start": "2026-01-01",
+                    "end": "2026-06-19"
+                  },
+                  "filter_expression": "[PPID] != \"TT_TEST\""
+                }
+              ],
+              "primary_step": "CR860200",
+              "exclude_rework": true,
+              "exclude_engineering_lot": true,
+              "exclude_abnormal_route": true
+            },
+            "eds": null,
+            "chart": null
+          }
+        }
+      ]
+    },
+    {
+      "id": "PS003",
+      "folder_id": "PF001",
+      "name": "X",
+      "scope": "personal",
+      "owner": "me",
+      "created_at": "2026-07-02T23:24:18",
+      "revisions": [
+        {
+          "rev": 0,
+          "note": "",
+          "created_at": "2026-07-02T23:24:18",
+          "created_by": "me",
+          "criteria": {
+            "fab": {
+              "products": [
+                "KCAI"
+              ],
+              "step_conditions": [
+                {
+                  "fab_step": "CR860200",
+                  "date_range": {
+                    "start": "2026-01-01",
+                    "end": "2026-06-19"
+                  },
+                  "filter_expression": ""
+                }
+              ],
+              "primary_step": "CR860200",
+              "exclude_rework": true,
+              "exclude_engineering_lot": true,
+              "exclude_abnormal_route": true
+            },
+            "eds": null,
+            "chart": null
+          }
+        }
+      ]
+    }
+  ],
+  "custom_eds_items": [
+    {
+      "name": "H2H_SUM",
+      "category": "BIN",
+      "terms": [
+        {
+          "item": "BIN_014",
+          "sign": 1
+        },
+        {
+          "item": "BIN_208",
+          "sign": 1
+        },
+        {
+          "item": "BIN_377",
+          "sign": 1
+        }
+      ],
+      "owner": "me",
+      "created_at": "2026-07-02T00:00:00"
+    }
+  ],
+  "counters": {
+    "folder": 2,
+    "preset": 3
+  }
+}

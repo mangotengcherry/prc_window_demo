@@ -12,6 +12,7 @@ from app.api import (
     routes_export,
     routes_metadata,
     routes_prediction,
+    routes_presets,
     routes_window_review,
 )
 from app.core.config import settings
@@ -42,6 +43,7 @@ def health():
 
 app.include_router(routes_metadata.router)
 app.include_router(routes_expressions.router)
+app.include_router(routes_presets.router)
 app.include_router(routes_analysis_sets.router)
 app.include_router(routes_bin_groups.router)
 app.include_router(routes_condition_rules.router)
