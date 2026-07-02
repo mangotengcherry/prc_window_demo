@@ -20,12 +20,7 @@ export const guideWorkflowSteps = [
     body: '이상 wafer를 삭제하지 않고 Exclusion Rule version으로 저장한 뒤 제외 전/후 correlation, slope, fail rate 변화를 비교합니다.',
   },
   {
-    title: '5. Pending 물량 리스크 확인',
-    menu: 'Pending Prediction',
-    body: 'FAB/FDC는 확보됐지만 EDS가 미완료인 wafer의 BIN Group fail rate를 예측 범위와 confidence와 함께 확인합니다.',
-  },
-  {
-    title: '6. Spotfire/보고용 Export',
+    title: '5. Spotfire/보고용 Export',
     menu: 'Export / Report',
     body: '필터링 데이터, Analysis Set, BIN Group, Condition Rule, Exclusion Rule과 요약 문장을 내려받아 후속 분석이나 보고에 사용합니다.',
   },
@@ -39,13 +34,7 @@ export const guideScenarios = [
     outcome: 'SPEC 완화 가능 여부를 단정하지 않고, 완화 검토 후보/추가 검증 필요/조건별 split spec 후보로 정리합니다.',
   },
   {
-    title: '시나리오 B. ECO/PPID/Recipe 변경 후 사전 리스크 점검',
-    trigger: '공정조건 변경 후 아직 EDS가 완료되지 않은 물량이 누적되는 상황',
-    path: ['분석대상 선정에서 Include pending 선택', 'Window Review에서 조건 Rule로 ECO 또는 PPID split 선택 후 Time Trend에서 변경 event 전후 확인', 'Pending Prediction에서 pending wafer risk table 확인', 'EDS 완료 후 backtest metric으로 예측 품질 확인'],
-    outcome: 'Actual EDS와 Predicted Pending EDS를 분리해서 보고, confidence가 낮은 조건은 추적 대상으로 남깁니다.',
-  },
-  {
-    title: '시나리오 C. SPEC 내 관리 중인데 불량이 발생한 경우',
+    title: '시나리오 B. SPEC 내 관리 중인데 불량이 발생한 경우',
     trigger: 'FAB parameter는 SPEC 안에 있지만 특정 BIN Group 불량률이 상승하는 상황',
     path: ['분석대상 선정에서 abnormal route/rework 제외 조건 확인', 'Window Review의 Condition Split과 Zone View 확인', 'Interaction Heatmap에서 두 FAB parameter 조합 영향 확인', 'Raw Scatter에서 noise wafer 후보를 Exclusion Rule로 저장', '제외 전/후 Window Chart와 summary metric 비교'],
     outcome: '기존 FAB 인자가 원인인지, 다른 공정 noise인지, wafer zone 또는 교호작용 문제인지 검토 경로를 좁힙니다.',

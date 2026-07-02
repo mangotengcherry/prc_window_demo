@@ -9,7 +9,6 @@
         <el-menu-item index="/guide"><el-icon><Guide /></el-icon><span>사용 가이드</span></el-menu-item>
         <el-menu-item index="/analysis-set"><el-icon><Filter /></el-icon><span>분석대상 선정</span></el-menu-item>
         <el-menu-item index="/window-review"><el-icon><TrendCharts /></el-icon><span>Window Review</span></el-menu-item>
-        <el-menu-item index="/pending-prediction"><el-icon><DataLine /></el-icon><span>Pending 예측</span></el-menu-item>
         <el-menu-item index="/export-report"><el-icon><Download /></el-icon><span>Export / Report</span></el-menu-item>
       </el-menu>
       <div class="nav-footer">
@@ -26,7 +25,6 @@
         </div>
         <div class="topbar-actions">
           <el-button :icon="Refresh" plain @click="refreshAll">새로고침</el-button>
-          <el-button :icon="Plus" type="primary" plain @click="ensureDefault">기본 분석 Set</el-button>
         </div>
       </el-header>
       <el-main class="main-surface">
@@ -39,7 +37,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { DataLine, Download, Filter, Guide, Plus, Refresh, TrendCharts } from '@element-plus/icons-vue'
+import { Download, Filter, Guide, Refresh, TrendCharts } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { useAnalysisSetStore } from './stores/analysisSetStore'
 import { useBinGroupStore } from './stores/binGroupStore'
@@ -72,13 +70,7 @@ async function refreshAll() {
   ElMessage.success('Workbench 기준 정보가 갱신되었습니다')
 }
 
-async function ensureDefault() {
-  const item = await analysisSets.createDefault()
-  ElMessage.success(`${item.name} 생성 완료`)
-}
-
 onMounted(async () => {
   await refreshAll()
-  if (!analysisSets.analysisSets.length) await ensureDefault()
 })
 </script>

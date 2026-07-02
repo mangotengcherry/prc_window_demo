@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { createAnalysisSet, fetchAnalysisSets, fetchMetadata, fetchSelectionPreview, resetMockData } from '../api/analysisApi'
+import { createAnalysisSet, fetchAnalysisSets, fetchMetadata, fetchSelectionPreview } from '../api/analysisApi'
 
 const defaultFabCriteria = () => ({
   products: ['KCAI'],
@@ -85,11 +85,6 @@ export const useAnalysisSetStore = defineStore('analysisSet', {
       this.selectedAnalysisSetId = item.id
       return item
     },
-    async reset() {
-      await resetMockData()
-      await this.loadMetadata()
-      await this.loadAnalysisSets()
-    },
     async runPreview() {
       this.previewLoading = true
       try {
@@ -117,7 +112,7 @@ export const useAnalysisSetStore = defineStore('analysisSet', {
       const metadata = this.metadata
       if (!metadata) return
       const product = metadata.products?.[0]
-      const fabStep = metadata.process_modules?.[0]?.fab_steps?.[0] || ''
+      const fabStep = metadata.process_modules?.[0]?.fab_steps?.[0]?.step_id || ''
       const dateRange = {
         start: metadata.date_range?.start_date ?? null,
         end: metadata.date_range?.end_date ?? null,

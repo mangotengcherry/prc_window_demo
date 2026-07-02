@@ -33,7 +33,7 @@ test('summarizeWindowReview keeps Korean candidate language cautious and unit-sa
 })
 
 test('guide content gives first-time users scenario-oriented Korean navigation', () => {
-  assert.ok(guideWorkflowSteps.length >= 6)
+  assert.ok(guideWorkflowSteps.length >= 5)
   assert.equal(guideWorkflowSteps[0].title, '1. 분석 물량 정의')
   assert.ok(guideScenarios.some((scenario) => scenario.title.includes('SPEC 완화')))
   assert.ok(guideScenarios.some((scenario) => scenario.path.some((step) => step.includes('Window Review'))))

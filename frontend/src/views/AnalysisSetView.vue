@@ -10,7 +10,6 @@
       <FilterPanel title="① FAB 진행 이력 기반" subtitle="제품 · 공정 · 진행기간 · 필터식으로 FAB 물량을 정의합니다. 최대 3개 공정을 join(교집합)할 수 있습니다.">
         <template #actions>
           <el-button plain @click="fillSample">예시 데이터로 미리보기</el-button>
-          <el-button :icon="Refresh" plain @click="resetSynthetic">Mock data 재생성</el-button>
         </template>
         <FabHistoryForm v-model:criteria="store.criteria.fab" :error="fabError" />
       </FilterPanel>
@@ -70,7 +69,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { Plus, Refresh } from '@element-plus/icons-vue'
+import { Plus } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import FilterPanel from '../components/common/FilterPanel.vue'
 import SummaryCard from '../components/common/SummaryCard.vue'
@@ -81,13 +80,9 @@ import SelectionPreview from '../components/analysisSet/SelectionPreview.vue'
 import SavePresetDialog from '../components/analysisSet/SavePresetDialog.vue'
 import { defaultChartState, defaultEdsCriteria, useAnalysisSetStore } from '../stores/analysisSetStore'
 import { usePresetStore } from '../stores/presetStore'
-import { useBinGroupStore } from '../stores/binGroupStore'
-import { useConditionRuleStore } from '../stores/conditionRuleStore'
 
 const store = useAnalysisSetStore()
 const presetStore = usePresetStore()
-const binGroups = useBinGroupStore()
-const conditionRules = useConditionRuleStore()
 
 const analysisSetName = ref('Ch.Hole CD window review')
 const savePresetVisible = ref(false)
@@ -130,12 +125,6 @@ async function saveAnalysisSet() {
 async function fillSample() {
   store.fillSampleCriteria()
   await store.runPreview()
-}
-
-async function resetSynthetic() {
-  await store.reset()
-  await Promise.all([binGroups.loadBinGroups(), conditionRules.loadConditionRules(), presetStore.loadTree()])
-  ElMessage.success('Synthetic mock data를 재생성했습니다')
 }
 
 let suppressDirtyOnce = false
