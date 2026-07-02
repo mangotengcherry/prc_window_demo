@@ -5,6 +5,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import PlotlyChart from './PlotlyChart.vue'
+import { CATEGORICAL_PALETTE } from '../../palette.ts'
 
 const props = defineProps<{ rows: any[] }>()
 const emit = defineEmits<{ (event: 'bar-click', binId: string): void }>()
@@ -16,7 +17,7 @@ const data = computed(() => [
     x: props.rows.map((row) => row.bin_id),
     y: props.rows.map((row) => row.mean_fail_rate),
     customdata: props.rows,
-    marker: { color: props.rows.map((row) => (row.in_selected_group ? '#2563eb' : '#94a3b8')) },
+    marker: { color: props.rows.map((row) => (row.in_selected_group ? CATEGORICAL_PALETTE[0] : '#94a3b8')) },
     hovertemplate: '%{x}<br>fail rate %{y:.2%}<extra></extra>',
   },
   {
@@ -26,7 +27,7 @@ const data = computed(() => [
     x: props.rows.map((row) => row.bin_id),
     y: props.rows.map((row) => row.cum_pct),
     yaxis: 'y2',
-    line: { color: '#dc2626', width: 2 },
+    line: { color: CATEGORICAL_PALETTE[5], width: 2 },
     hovertemplate: '%{x}<br>누적 %{y:.1%}<extra></extra>',
   },
 ])

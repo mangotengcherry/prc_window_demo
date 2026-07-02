@@ -42,6 +42,7 @@ import { FolderAdd, MoreFilled } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { currentUser, usePresetStore } from '../../stores/presetStore'
 
+const props = defineProps<{ hasUnsavedCriteria?: boolean }>()
 const emit = defineEmits<{
   (e: 'load', criteria: any, info: { id: string; name: string; rev: number; folderName: string; scope: string; owner: string }): void
 }>()
@@ -87,6 +88,17 @@ const treeData = computed(() =>
 )
 
 async function loadRevision(data: any) {
+  if (props.hasUnsavedCriteria) {
+    try {
+      await ElMessageBox.confirm('현재 입력된 조건이 저장되지 않았습니다. 불러오면 대체됩니다. 계속할까요?', '조건 불러오기', {
+        confirmButtonText: '불러오기',
+        cancelButtonText: '취소',
+        type: 'warning',
+      })
+    } catch {
+      return
+    }
+  }
   const revision = await presetStore.fetchRevision(data.presetId, data.rev)
   presetStore.markLoaded({
     id: data.presetId,

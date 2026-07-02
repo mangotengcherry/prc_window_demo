@@ -7,7 +7,7 @@ export const guideWorkflowSteps = [
   {
     title: '2. BIN Group·조건 Legend 활용',
     menu: '분석대상 선정 / Window Review',
-    body: '단일 EDS BIN 또는 여러 BIN의 sum·차로 만드는 BIN Group(Failure Mode)은 분석대상 선정 화면의 커스텀 EDS 아이템으로 구성하고, ECO·PPID·Tool/Chamber·부품 개조 전후 같은 조건 legend와 before/after 비교는 Window Review의 Commonality 탭(자동 유의성 분석)이나 차트 legend 선택에서 확인합니다.',
+    body: 'BIN Group(Failure Mode)은 Window Review의 BIN Pareto 탭에서 막대를 클릭해 단일 BIN 임시 그룹으로 생성할 수 있습니다. 조건 Rule은 사전 시드된 목록 중에서 선택해 적용하며, ECO·PPID·Tool/Chamber·부품 개조 전후 같은 조건 legend와 before/after 비교는 Window Review의 Commonality 탭(자동 유의성 분석)이나 차트 legend 선택에서 확인합니다.',
   },
   {
     title: '3. Window 관계 확인',
@@ -43,8 +43,8 @@ export const guideScenarios = [
 
 export const guideGlossary = [
   { term: 'Analysis Set', meaning: '분석 대상 물량과 제외 조건을 저장한 재실행 가능한 단위' },
-  { term: 'BIN Group', meaning: '하나 이상의 EDS BIN을 합산해 만든 Failure Mode metric. 분석대상 선정에서 구성하고 Window Review 등에서 선택해 사용합니다.' },
-  { term: 'Condition Rule', meaning: '차트 legend와 비교 기준이 되는 rule, 예: 부품 개조 전/후. Window Review에서 선택해 적용합니다.' },
+  { term: 'BIN Group', meaning: '하나 이상의 EDS BIN을 합산해 만든 Failure Mode metric. 현재는 Window Review의 BIN Pareto 탭에서 막대를 클릭해 단일 BIN짜리 임시 그룹만 만들 수 있습니다.' },
+  { term: 'Condition Rule', meaning: '차트 legend와 비교 기준이 되는 rule, 예: 부품 개조 전/후. Window Review에서 사전 시드된 목록 중 선택해 적용합니다(직접 생성 UI는 없음).' },
   { term: 'Exclusion Rule', meaning: '삭제가 아닌 제외 version. 사유와 wafer 목록을 보존합니다.' },
   { term: 'Pending Prediction', meaning: 'EDS 미완료 물량의 BIN Group fail rate 참고 예측' },
 ]

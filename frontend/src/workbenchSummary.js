@@ -33,6 +33,7 @@ export function summarizeWindowReview(review) {
     failRateText: pct(metrics.high_side_fail_rate),
     lowFailRateText: pct(metrics.low_side_fail_rate),
     correlationText: metrics.correlation == null ? '-' : Number(metrics.correlation).toFixed(2),
+    correlationSampleText: `n=${count(metrics.actual_wafer_count)}`,
     safeWindowText: windowText(metrics.safe_window),
     safeWindowOccupancyText: pct(metrics.safe_window_occupancy),
     recentTrendText: trendText(metrics.recent_trend),

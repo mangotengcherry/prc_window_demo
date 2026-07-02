@@ -50,7 +50,7 @@ def _candidate_copy(stats: dict[str, Any], low_rate: float, high_rate: float) ->
     if low_rate > high_rate * 1.25 and slope < 0:
         candidates.append({"type": "SPEC 강화 검토 후보", "basis": "선택 Window에서 low-side Not Open risk가 우세합니다."})
     if abs(corr) < 0.12:
-        candidates.append({"type": "추가 검증 필요 후보", "basis": "전체 X-Y 관계가 약하므로 condition split 또는 interaction 확인이 필요합니다."})
+        candidates.insert(0, {"type": "추가 검증 필요 후보", "basis": "전체 X-Y 관계가 약하므로 condition split 또는 interaction 확인이 필요합니다."})
     candidates.append({"type": "Split spec 후보", "basis": "공통 SPEC 변경 전 chamber, PPID, 부품 개조 전후 split을 검토해야 합니다."})
     return candidates
 

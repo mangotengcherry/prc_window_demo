@@ -76,7 +76,15 @@
         <el-tab-pane label="Trade-off" name="tradeoff">
           <div class="chart-panel"><TradeoffChart :rows="review.tradeoff_data" :x-title="xParameter" /></div>
         </el-tab-pane>
-        <el-tab-pane label="Time Trend" name="trend">
+        <el-tab-pane name="trend">
+          <template #label>
+            <span class="tab-label">
+              Time Trend
+              <el-tag v-if="review.trend_data?.spc?.violations?.length" type="danger" size="small" round class="tab-label__badge">
+                {{ review.trend_data.spc.violations.length }}
+              </el-tag>
+            </span>
+          </template>
           <div class="tab-toolbar">
             <el-tag v-if="review.trend_data?.spc" :type="review.trend_data.spc.violations.length ? 'danger' : 'success'" size="small">
               SPC 위반 {{ review.trend_data.spc.violations.length }}건
@@ -85,7 +93,15 @@
           </div>
           <div class="chart-panel"><TimeTrendChart :trend="review.trend_data" :spc="review.trend_data?.spc" /></div>
         </el-tab-pane>
-        <el-tab-pane label="Commonality" name="commonality">
+        <el-tab-pane name="commonality">
+          <template #label>
+            <span class="tab-label">
+              Commonality
+              <el-tag v-if="significantCommonalityCount" type="warning" size="small" round class="tab-label__badge">
+                {{ significantCommonalityCount }}
+              </el-tag>
+            </span>
+          </template>
           <CommonalityPanel :rows="review.commonality_data" />
         </el-tab-pane>
         <el-tab-pane label="Zone View" name="zone">
@@ -117,7 +133,7 @@
                 </div>
               </div>
             </div>
-            <ExcludedPointsTable :rules="reviewStore.exclusions" />
+            <ExcludedPointsTable :rules="reviewStore.exclusions" :active-rule-id="review.context?.exclusion_rule_id" />
           </FilterPanel>
         </el-tab-pane>
       </el-tabs>
@@ -169,6 +185,10 @@ const yAxisTitle = computed(() => {
   return review.value?.context?.bin_groups?.[0]?.name
 })
 
+const significantCommonalityCount = computed(() => {
+  return (review.value?.commonality_data || []).filter((row: any) => row.p_value != null && row.p_value < 0.05).length
+})
+
 const exclusionDelta = computed(() => {
   const before = review.value?.excluded_point_summary?.before?.correlation
   const after = review.value?.excluded_point_summary?.after?.correlation
@@ -182,6 +202,7 @@ function payload(extra: Record<string, any> = {}) {
     x_parameter: xParameter.value,
     bin_group_ids: groups.selectedBinGroupIds.length ? groups.selectedBinGroupIds : ['BG001'],
     condition_rule_id: rules.selectedConditionRuleId,
+    exclusion_rule_id: review.value?.context?.exclusion_rule_id ?? null,
     view_options: { ...reviewStore.viewOptions },
     ...extra,
   }
@@ -259,6 +280,16 @@ onMounted(async () => {
   color: #64748b;
   font-size: 12px;
   font-weight: 700;
+}
+
+.tab-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tab-label__badge {
+  padding: 0 6px;
 }
 
 .delta-up {

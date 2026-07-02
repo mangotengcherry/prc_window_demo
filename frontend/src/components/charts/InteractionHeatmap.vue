@@ -5,6 +5,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import PlotlyChart from './PlotlyChart.vue'
+import { HEAT_RAMP } from '../../palette.ts'
 
 const props = defineProps<{ rows: any[] }>()
 
@@ -23,7 +24,7 @@ const data = computed(() => {
       y: ys,
       z,
       customdata: counts,
-      colorscale: 'YlOrRd',
+      colorscale: HEAT_RAMP,
       hovertemplate: 'X %{x}<br>Y %{y}<br>Fail %{z:.2%}<br>n=%{customdata}<extra></extra>',
     },
     {

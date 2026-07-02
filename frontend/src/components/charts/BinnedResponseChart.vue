@@ -5,6 +5,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import PlotlyChart from './PlotlyChart.vue'
+import { CATEGORICAL_PALETTE } from '../../palette.ts'
 
 const props = defineProps<{ rows: any[]; xTitle?: string }>()
 
@@ -20,7 +21,7 @@ const segments = computed(() => {
       mode: 'lines',
       x: [rows[i].bin_center, rows[i + 1].bin_center],
       y: [rows[i].fail_rate, rows[i + 1].fail_rate],
-      line: { color: low ? '#94a3b8' : '#2563eb', width: 2, dash: low ? 'dot' : 'solid' },
+      line: { color: low ? '#94a3b8' : CATEGORICAL_PALETTE[0], width: 2, dash: low ? 'dot' : 'solid' },
       showlegend: false,
       hoverinfo: 'skip',
     })
@@ -39,7 +40,7 @@ const data = computed(() => [
     error_y: { type: 'data', array: props.rows.map((row) => row.stderr || 0), visible: true },
     marker: {
       size: props.rows.map((row) => Math.max(6, Math.min(18, row.wafer_count / 12))),
-      color: props.rows.map((row) => (row.wafer_count < LOW_SAMPLE_THRESHOLD ? '#94a3b8' : '#2563eb')),
+      color: props.rows.map((row) => (row.wafer_count < LOW_SAMPLE_THRESHOLD ? '#94a3b8' : CATEGORICAL_PALETTE[0])),
       opacity: props.rows.map((row) => (row.wafer_count < LOW_SAMPLE_THRESHOLD ? 0.55 : 1)),
     },
     text: props.rows.map((row) => `${row.wafer_count}매 wafer${row.wafer_count < LOW_SAMPLE_THRESHOLD ? ' (저표본)' : ''}`),

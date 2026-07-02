@@ -146,8 +146,9 @@ select {
   min-width: 0;
   padding: 18px;
   border: 1px solid #d8dee8;
-  border-radius: 8px;
+  border-radius: var(--radius-panel);
   background: #ffffff;
+  box-shadow: var(--shadow-soft);
 }
 
 .panel-heading {
@@ -217,13 +218,12 @@ select {
 
 .summary-band {
   display: grid;
-  grid-template-columns: repeat(6, minmax(120px, 1fr)) minmax(240px, 1.4fr);
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
   gap: 10px;
   min-width: 0;
 }
 
 .summary-band.compact {
-  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
   margin-bottom: 12px;
 }
 
@@ -234,6 +234,11 @@ select {
   border: 1px solid #d8dee8;
   border-radius: 8px;
   background: #ffffff;
+}
+
+.candidate-callout {
+  border-left: 3px solid #2563eb;
+  padding-left: 13px;
 }
 
 .summary-card__label,
@@ -269,8 +274,9 @@ select {
   min-width: 0;
   padding: 0 16px 16px;
   border: 1px solid #d8dee8;
-  border-radius: 8px;
+  border-radius: var(--radius-panel);
   background: #ffffff;
+  box-shadow: var(--shadow-soft);
 }
 
 .chart-panel {

@@ -1,6 +1,6 @@
 <template>
   <div class="analysis-set-layout">
-    <PresetTree @load="onPresetLoad" />
+    <PresetTree :has-unsaved-criteria="fabValid || presetStore.dirty" @load="onPresetLoad" />
 
     <section class="analysis-set-main">
       <div v-if="presetStore.loadedPreset" class="preset-load-badge" :class="{ 'is-dirty': presetStore.dirty }">
@@ -36,9 +36,10 @@
         <div class="form-actions mt-8">
           <el-button @click="savePresetVisible = true">Preset으로 저장(Rev)</el-button>
         </div>
+        <p class="report-note">Preset 저장은 재사용 가능한 조건 라이브러리입니다. 실제 검토에 쓸 물량 확정본은 아래 Analysis Set 저장으로 남겨주세요.</p>
         <div class="form-actions mt-8">
-          <el-input v-model="analysisSetName" placeholder="Analysis Set 이름" />
-          <el-button :icon="Plus" type="primary" @click="saveAnalysisSet">Analysis Set 저장</el-button>
+          <el-input v-model="analysisSetName" placeholder="Analysis Set 이름을 입력하세요" />
+          <el-button :icon="Plus" type="primary" :disabled="!analysisSetName.trim()" @click="saveAnalysisSet">Analysis Set 저장</el-button>
         </div>
       </FilterPanel>
 
@@ -70,7 +71,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { Plus } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import FilterPanel from '../components/common/FilterPanel.vue'
 import SummaryCard from '../components/common/SummaryCard.vue'
 import PresetTree from '../components/analysisSet/PresetTree.vue'
@@ -84,7 +85,7 @@ import { usePresetStore } from '../stores/presetStore'
 const store = useAnalysisSetStore()
 const presetStore = usePresetStore()
 
-const analysisSetName = ref('Ch.Hole CD window review')
+const analysisSetName = ref('')
 const savePresetVisible = ref(false)
 const selected = computed(() => store.selectedAnalysisSet)
 
@@ -123,6 +124,17 @@ async function saveAnalysisSet() {
 }
 
 async function fillSample() {
+  if (fabValid.value || presetStore.dirty) {
+    try {
+      await ElMessageBox.confirm('입력한 FAB/EDS 조건이 예시 데이터로 대체됩니다. 계속할까요?', '예시 데이터로 덮어쓰기', {
+        confirmButtonText: '계속',
+        cancelButtonText: '취소',
+        type: 'warning',
+      })
+    } catch {
+      return
+    }
+  }
   store.fillSampleCriteria()
   await store.runPreview()
 }

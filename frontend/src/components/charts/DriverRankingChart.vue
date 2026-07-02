@@ -10,6 +10,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import PlotlyChart from './PlotlyChart.vue'
+import { CATEGORICAL_PALETTE } from '../../palette.ts'
 
 const props = defineProps<{ rows: any[] }>()
 const emit = defineEmits<{ (event: 'bar-click', parameter: string): void }>()
@@ -23,7 +24,7 @@ const data = computed(() => [
     x: sorted.value.map((row) => row.abs_corr),
     y: sorted.value.map((row) => row.parameter),
     customdata: sorted.value,
-    marker: { color: sorted.value.map((row) => (row.corr >= 0 ? '#dc2626' : '#2563eb')) },
+    marker: { color: sorted.value.map((row) => (row.corr >= 0 ? CATEGORICAL_PALETTE[5] : CATEGORICAL_PALETTE[0])) },
     text: sorted.value.map((row) => `r=${row.corr} (n=${row.n})`),
     textposition: 'outside',
     hovertemplate: '%{y}<br>|r|=%{x:.3f}<extra></extra>',

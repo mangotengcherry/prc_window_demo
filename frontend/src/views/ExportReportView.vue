@@ -7,12 +7,18 @@
         </el-select>
       </div>
       <div class="export-actions">
-        <el-button :icon="Download" type="primary" tag="a" :href="analysisCsvUrl" target="_blank">필터링 wafer CSV</el-button>
+        <el-tooltip v-if="!analysis.selectedAnalysisSet?.id" content="Analysis Set을 선택해야 CSV를 내려받을 수 있습니다">
+          <span><el-button :icon="Download" type="primary" disabled>필터링 wafer CSV</el-button></span>
+        </el-tooltip>
+        <el-button v-else :icon="Download" type="primary" tag="a" :href="analysisCsvUrl" target="_blank">필터링 wafer CSV</el-button>
         <el-button :icon="Download" plain @click="downloadJson('analysis-set.json', analysis.selectedAnalysisSet)">Analysis Set JSON</el-button>
         <el-button :icon="Download" plain @click="downloadJson('bin-groups.json', groups.binGroups)">BIN Group JSON</el-button>
         <el-button :icon="Download" plain @click="downloadJson('condition-rules.json', rules.conditionRules)">Condition Rule JSON</el-button>
         <el-button :icon="Download" plain @click="downloadJson('exclusion-rules.json', store.exclusions)">Exclusion Rule JSON</el-button>
-        <el-button :icon="Document" plain @click="loadReport" :disabled="!store.review?.analysis_run_id">보고용 요약 생성</el-button>
+        <el-tooltip v-if="!store.review?.analysis_run_id" content="Window Review를 먼저 실행해야 보고용 요약을 생성할 수 있습니다">
+          <span><el-button :icon="Document" plain disabled>보고용 요약 생성</el-button></span>
+        </el-tooltip>
+        <el-button v-else :icon="Document" plain @click="loadReport">보고용 요약 생성</el-button>
       </div>
     </FilterPanel>
 
