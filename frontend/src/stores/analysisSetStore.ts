@@ -2,9 +2,9 @@ import { defineStore } from 'pinia'
 import { createAnalysisSet, fetchAnalysisSets, fetchMetadata, resetMockData } from '../api/analysisApi'
 
 const defaultFilters = () => ({
-  product: ['DRAM_A'],
+  product: ['KCAI'],
   layer: ['M1'],
-  step: ['ETCH_CONTACT'],
+  step: ['CR860200'],
   parameter: ['metro_ch_hole_cd'],
   tool: [],
   chamber: [],

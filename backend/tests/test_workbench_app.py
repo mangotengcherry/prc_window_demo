@@ -79,9 +79,9 @@ def test_analysis_set_bin_group_condition_rule_and_window_review_roundtrip():
         {
             "name": "Ch.Hole CD relaxation check",
             "filters": {
-                "product": ["DRAM_A"],
+                "product": ["KCAI"],
                 "layer": ["M1"],
-                "step": ["ETCH_CONTACT"],
+                "step": ["CR860200"],
                 "parameter": ["metro_ch_hole_cd"],
                 "eds_status": "actual_only",
                 "exclude_rework": True,
@@ -156,9 +156,9 @@ def test_exclusion_prediction_and_exports_are_available():
         {
             "name": "Pending risk check",
             "filters": {
-                "product": ["DRAM_A"],
+                "product": ["KCAI"],
                 "layer": ["M1"],
-                "step": ["ETCH_CONTACT"],
+                "step": ["CR860200"],
                 "parameter": ["metro_ch_hole_cd"],
                 "eds_status": "include_pending",
             },

@@ -9,6 +9,7 @@ import pandas as pd
 @dataclass
 class MockStore:
     wafer_data: pd.DataFrame = field(default_factory=pd.DataFrame)
+    fab_history: pd.DataFrame = field(default_factory=pd.DataFrame)
     metadata: dict[str, Any] = field(default_factory=dict)
     analysis_sets: dict[str, dict[str, Any]] = field(default_factory=dict)
     bin_groups: dict[str, dict[str, Any]] = field(default_factory=dict)
