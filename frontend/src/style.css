@@ -4,6 +4,9 @@
   background: #eef2f6;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
+  --radius-panel: 12px;
+  --gap-page: 16px;
+  --shadow-soft: 0 1px 3px rgb(15 23 42 / 0.08);
 }
 
 * {
@@ -429,6 +432,236 @@ select {
 
 .mt-8 {
   margin-top: 8px;
+}
+
+/* Analysis Set 화면 — 조건 라이브러리 / FAB·EDS 폼 / 미리보기 3단 레이아웃 (§3, §9) */
+.analysis-set-layout {
+  display: grid;
+  grid-template-columns: 236px minmax(460px, 1fr) minmax(360px, 420px);
+  gap: var(--gap-page);
+  align-items: start;
+  min-width: 0;
+}
+
+.preset-tree-panel {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #d8dee8;
+  border-radius: var(--radius-panel);
+  background: #f8fafc;
+  box-shadow: var(--shadow-soft);
+}
+
+.preset-tree-panel .el-tree {
+  background: transparent;
+}
+
+.preset-tree-panel .el-tree-node__content {
+  border-radius: 6px;
+}
+
+.preset-tree-panel .el-tree-node.is-current > .el-tree-node__content {
+  background: #eff6ff;
+  border-left: 3px solid #2563eb;
+  padding-left: calc(var(--indent, 0px) - 3px);
+}
+
+.analysis-set-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-page);
+  min-width: 0;
+}
+
+.analysis-set-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.preset-load-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.preset-load-badge.is-dirty {
+  border-color: #fde68a;
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.fab-step-card {
+  padding: 12px;
+  border: 1px solid #d8dee8;
+  border-radius: 8px;
+  background: #fbfcfe;
+  margin-bottom: 12px;
+}
+
+.fab-step-card__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.fab-step-card__title {
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.fab-step-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border: 1px dashed #d8dee8;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #475569;
+  font-size: 13px;
+  cursor: pointer;
+  margin-bottom: 12px;
+}
+
+.join-hint {
+  margin: 4px 0 12px;
+  color: #2563eb;
+  font-size: 12px;
+}
+
+.join-actions {
+  margin-top: 2px;
+}
+
+.filter-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.preview-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 220px;
+  padding: 24px;
+  border: 1px dashed #d8dee8;
+  border-radius: 8px;
+  color: #64748b;
+  font-size: 13px;
+  text-align: center;
+}
+
+.join-flow-text {
+  margin-top: 6px;
+  color: #475569;
+  font-size: 12px;
+}
+
+.join-flow-text.is-empty {
+  color: #dc2626;
+  font-weight: 700;
+}
+
+.expr-editor__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.expr-editor__columns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.expr-editor__status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.expr-editor__status.is-valid {
+  color: #16a34a;
+}
+
+.expr-editor__status.is-invalid {
+  color: #dc2626;
+}
+
+.custom-eds-dialog__error {
+  margin: 4px 0 0;
+  color: #dc2626;
+  font-size: 12px;
+}
+
+.preset-tree-node {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  padding-right: 4px;
+}
+
+.preset-tree-node span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preset-tree-node__more {
+  margin-left: auto;
+  color: #94a3b8;
+}
+
+.eds-item-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.eds-item-option__delete {
+  color: #94a3b8;
+}
+
+.eds-item-option__delete:hover {
+  color: #dc2626;
+}
+
+.custom-eds-dialog__formula {
+  margin: 4px 0 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+@media (max-width: 1366px) {
+  .analysis-set-layout {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 1120px) {

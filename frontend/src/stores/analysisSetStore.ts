@@ -1,5 +1,36 @@
 import { defineStore } from 'pinia'
-import { createAnalysisSet, fetchAnalysisSets, fetchMetadata, resetMockData } from '../api/analysisApi'
+import { createAnalysisSet, fetchAnalysisSets, fetchMetadata, fetchSelectionPreview, resetMockData } from '../api/analysisApi'
+
+const defaultFabCriteria = () => ({
+  products: ['KCAI'],
+  step_conditions: [{ fab_step: '', date_range: { start: null, end: null }, filter_expression: '' }],
+  primary_step: null as string | null,
+  exclude_rework: true,
+  exclude_engineering_lot: true,
+  exclude_abnormal_route: true,
+})
+
+const defaultEdsCriteria = () => ({
+  eds_step: 'M',
+  eds_category: 'BIN',
+  eds_items: [] as string[],
+  date_range: { start: null, end: null },
+  part_id: 'All',
+  filter_expression: '',
+})
+
+const defaultChartState = () => ({
+  x_axis: 'fab_time',
+  legend_by: null as string | null,
+  adhoc_filters: [] as string[],
+  computed_columns: [] as { name: string; expression: string }[],
+})
+
+const defaultCriteria = () => ({
+  fab: defaultFabCriteria(),
+  eds: defaultEdsCriteria() as ReturnType<typeof defaultEdsCriteria> | null,
+  chart: defaultChartState(),
+})
 
 const defaultFilters = () => ({
   product: ['KCAI'],
@@ -22,6 +53,9 @@ export const useAnalysisSetStore = defineStore('analysisSet', {
     analysisSets: [] as any[],
     selectedAnalysisSetId: '',
     loading: false,
+    criteria: defaultCriteria(),
+    preview: null as any,
+    previewLoading: false,
   }),
   getters: {
     selectedAnalysisSet(state) {
@@ -56,7 +90,30 @@ export const useAnalysisSetStore = defineStore('analysisSet', {
       await this.loadMetadata()
       await this.loadAnalysisSets()
     },
+    async runPreview() {
+      this.previewLoading = true
+      try {
+        this.preview = await fetchSelectionPreview({
+          fab: this.criteria.fab,
+          eds: this.criteria.eds,
+          chart: this.criteria.chart,
+          sample_limit: 2000,
+        })
+      } finally {
+        this.previewLoading = false
+      }
+    },
+    async createFromCriteria(name: string) {
+      const item = await createAnalysisSet({ name, criteria: this.criteria })
+      await this.loadAnalysisSets()
+      this.selectedAnalysisSetId = item.id
+      return item
+    },
+    resetCriteria() {
+      this.criteria = defaultCriteria()
+      this.preview = null
+    },
   },
 })
 
-export { defaultFilters }
+export { defaultChartState, defaultCriteria, defaultEdsCriteria, defaultFabCriteria, defaultFilters }
