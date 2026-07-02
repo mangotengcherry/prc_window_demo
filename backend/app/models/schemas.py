@@ -24,11 +24,6 @@ class AnalysisSetFilters(BaseModel):
     exclude_abnormal_route: bool = True
 
 
-class AnalysisSetCreate(BaseModel):
-    name: str
-    filters: AnalysisSetFilters
-
-
 class BinGroupCreate(BaseModel):
     name: str
     description: str = ""
@@ -110,8 +105,8 @@ class FabCriteria(BaseModel):
     @field_validator("step_conditions")
     @classmethod
     def _validate_step_conditions(cls, value: list[FabStepCondition]) -> list[FabStepCondition]:
-        if len(value) > 3:
-            raise ValueError("공정 조건은 최대 3개까지 설정할 수 있습니다")
+        if not (1 <= len(value) <= 3):
+            raise ValueError("공정 조건은 1개 이상 3개 이하로 설정해야 합니다")
         steps = [condition.fab_step for condition in value]
         if len(steps) != len(set(steps)):
             raise ValueError("공정 조건에 중복된 공정이 있습니다")
@@ -143,6 +138,19 @@ class PresetCriteria(BaseModel):
     fab: FabCriteria
     eds: EdsCriteria | None = None
     chart: ChartState | None = None
+
+
+class AnalysisSetCreate(BaseModel):
+    name: str
+    filters: AnalysisSetFilters = Field(default_factory=AnalysisSetFilters)
+    criteria: PresetCriteria | None = None
+
+
+class SelectionPreviewRequest(BaseModel):
+    fab: FabCriteria
+    eds: EdsCriteria | None = None
+    chart: ChartState = Field(default_factory=ChartState)
+    sample_limit: int = 2000
 
 
 # ---------------------------------------------------------------------------

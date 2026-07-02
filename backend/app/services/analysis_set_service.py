@@ -3,9 +3,11 @@ from __future__ import annotations
 from typing import Any
 
 import pandas as pd
+from fastapi import HTTPException
 
 from app.data.mock_store import store
-from app.models.schemas import AnalysisSetCreate, AnalysisSetFilters
+from app.models.schemas import AnalysisSetCreate, AnalysisSetFilters, PresetCriteria
+from app.services import selection_service
 from app.services.mock_data_service import ensure_mock_data
 
 
@@ -13,8 +15,20 @@ def _list_filter(df: pd.DataFrame, column: str, values: list[str]) -> pd.Series:
     return pd.Series(True, index=df.index) if not values else df[column].isin(values)
 
 
-def apply_filters(filters: AnalysisSetFilters | dict[str, Any]) -> pd.DataFrame:
+def apply_filters(
+    filters: AnalysisSetFilters | dict[str, Any] | None = None,
+    criteria: PresetCriteria | dict[str, Any] | None = None,
+) -> pd.DataFrame:
     ensure_mock_data()
+    if criteria is not None:
+        if isinstance(criteria, dict):
+            criteria = PresetCriteria(**criteria)
+        try:
+            return selection_service.resolve_population(criteria)
+        except selection_service.SelectionStageError as exc:
+            raise HTTPException(status_code=400, detail=f"{exc.stage}: {exc.message}") from exc
+    if filters is None:
+        filters = AnalysisSetFilters()
     if isinstance(filters, dict):
         filters = AnalysisSetFilters(**filters)
     df = store.wafer_data
@@ -74,14 +88,26 @@ def summarize_filters(filters: AnalysisSetFilters | dict[str, Any], frame: pd.Da
     }
 
 
+def _summarize_criteria(frame: pd.DataFrame) -> dict[str, Any]:
+    wafer_count = int(len(frame))
+    actual_count = int((frame["eds_status"] == "actual").sum()) if wafer_count else 0
+    return {
+        "lot_count": int(frame["lot_id"].nunique()) if wafer_count else 0,
+        "wafer_count": wafer_count,
+        "eds_actual_coverage": round(float(actual_count / wafer_count), 4) if wafer_count else 0,
+        "eds_pending_count": int((frame["eds_status"] == "pending").sum()) if wafer_count else 0,
+    }
+
+
 def create_analysis_set(payload: AnalysisSetCreate) -> dict[str, Any]:
-    frame = apply_filters(payload.filters)
+    frame = apply_filters(payload.filters, payload.criteria)
     analysis_set_id = store.next_id("analysis_set", "AS")
     item = {
         "id": analysis_set_id,
         "name": payload.name,
         "filters": payload.filters.model_dump(),
-        "metrics": summarize_filters(payload.filters, frame),
+        "criteria": payload.criteria.model_dump() if payload.criteria else None,
+        "metrics": _summarize_criteria(frame) if payload.criteria else summarize_filters(payload.filters, frame),
     }
     store.analysis_sets[analysis_set_id] = item
     return item
@@ -98,4 +124,4 @@ def get_analysis_set(analysis_set_id: str) -> dict[str, Any]:
 
 def frame_for_analysis_set(analysis_set_id: str) -> pd.DataFrame:
     item = get_analysis_set(analysis_set_id)
-    return apply_filters(item["filters"])
+    return apply_filters(item.get("filters"), item.get("criteria"))
