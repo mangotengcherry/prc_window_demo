@@ -9,6 +9,7 @@
 
       <FilterPanel title="① FAB 진행 이력 기반" subtitle="제품 · 공정 · 진행기간 · 필터식으로 FAB 물량을 정의합니다. 최대 3개 공정을 join(교집합)할 수 있습니다.">
         <template #actions>
+          <el-button plain @click="fillSample">예시 데이터로 미리보기</el-button>
           <el-button :icon="Refresh" plain @click="resetSynthetic">Mock data 재생성</el-button>
         </template>
         <FabHistoryForm v-model:criteria="store.criteria.fab" :error="fabError" />
@@ -124,6 +125,11 @@ async function runQuery() {
 async function saveAnalysisSet() {
   const item = await store.createFromCriteria(analysisSetName.value)
   ElMessage.success(`${item.name} 저장 완료`)
+}
+
+async function fillSample() {
+  store.fillSampleCriteria()
+  await store.runPreview()
 }
 
 async function resetSynthetic() {

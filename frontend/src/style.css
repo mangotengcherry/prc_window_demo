@@ -439,11 +439,13 @@ select {
   display: grid;
   grid-template-columns: 236px minmax(460px, 1fr) minmax(360px, 420px);
   gap: var(--gap-page);
-  align-items: start;
+  align-items: stretch;
   min-width: 0;
 }
 
 .preset-tree-panel {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
   padding: 14px;
   border: 1px solid #d8dee8;
@@ -453,6 +455,9 @@ select {
 }
 
 .preset-tree-panel .el-tree {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   background: transparent;
 }
 

@@ -113,6 +113,34 @@ export const useAnalysisSetStore = defineStore('analysisSet', {
       this.criteria = defaultCriteria()
       this.preview = null
     },
+    fillSampleCriteria() {
+      const metadata = this.metadata
+      if (!metadata) return
+      const product = metadata.products?.[0]
+      const fabStep = metadata.process_modules?.[0]?.fab_steps?.[0] || ''
+      const dateRange = {
+        start: metadata.date_range?.start_date ?? null,
+        end: metadata.date_range?.end_date ?? null,
+      }
+      const edsItem = metadata.eds_items?.BIN?.[0]
+
+      this.criteria = {
+        fab: {
+          ...defaultFabCriteria(),
+          products: product ? [product] : [],
+          step_conditions: [{ fab_step: fabStep, date_range: { ...dateRange }, filter_expression: '' }],
+          primary_step: fabStep || null,
+        },
+        eds: {
+          ...defaultEdsCriteria(),
+          eds_step: 'M',
+          eds_category: 'BIN',
+          eds_items: edsItem ? [edsItem] : [],
+          date_range: { ...dateRange },
+        },
+        chart: defaultChartState(),
+      }
+    },
   },
 })
 
